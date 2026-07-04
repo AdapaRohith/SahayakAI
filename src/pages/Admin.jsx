@@ -92,11 +92,12 @@ export default function Admin() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
         <Stat label="Total cases" value={a.total} sub={`${a.resolved} resolved`} />
         <Stat label="SLA breach rate" value={`${a.breachRate}%`} tone={a.breachRate > 20 ? 'bad' : 'warn'} sub={`${a.breached} breached`} />
-        <Stat label="Officer hours saved" value={`${a.officerHoursSaved.toFixed(0)}h`} tone="good" sub={`${documents.length} docs drafted`} />
         <Stat label="Verified answers" value={`${a.verifiedPct}%`} tone={a.flaggedPct > 0 ? 'warn' : 'good'} sub={`${a.flagged} flagged unverified`} />
+        <Stat label="Docs human-approved" value="100%" tone="good" sub={`${a.issued} issued · 0 auto-issued`} />
+        <Stat label="Officer hours saved" value={`${a.officerHoursSaved.toFixed(0)}h`} tone="good" sub={`${documents.length} docs drafted`} />
       </div>
 
       {/* Charts */}

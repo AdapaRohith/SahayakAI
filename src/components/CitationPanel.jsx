@@ -5,8 +5,8 @@ import { Shield } from './ui.jsx'
 export default function CitationPanel({ sourceIds = [], activeIndex, unverified }) {
   if (unverified) {
     return (
-      <aside className="card p-4 border-breach/30 bg-breach-bg/40">
-        <div className="flex items-center gap-2 text-breach font-bold text-sm">
+      <aside className="card p-4 border-pending/40 bg-pending-bg/50">
+        <div className="flex items-center gap-2 text-pending font-bold text-sm">
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z" strokeLinejoin="round" strokeLinecap="round" />
           </svg>

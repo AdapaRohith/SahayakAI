@@ -15,7 +15,7 @@ const NAV = [
   { to: '/officer', label: 'Officer Copilot', hint: 'Draft' },
   { to: '/workflow', label: 'Workflow & SLA', hint: 'Cases' },
   { to: '/audit', label: 'Audit Trail', hint: 'Immutable' },
-  { to: '/admin', label: 'Admin', hint: 'Analytics' },
+  { to: '/admin', label: 'Analytics', hint: 'Supervisor' },
 ]
 
 const ROLES = ['Citizen', 'Officer', 'Supervisor']
@@ -63,6 +63,11 @@ export default function TopNav() {
               <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulseDot" />
               {audit.length} audited actions
             </div>
+
+            {/* Trust badge — nothing is issued without a human approval */}
+            <span className="hidden xl:inline-flex chip bg-approved-bg text-approved font-bold">
+              ✓ 100% human-approved
+            </span>
 
             {/* Role switcher (RBAC) */}
             <label className="flex items-center gap-2">

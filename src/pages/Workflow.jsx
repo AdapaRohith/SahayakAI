@@ -12,7 +12,7 @@ const COLUMNS = [
 ]
 
 export default function Workflow() {
-  const { cases, escalateCase, addCase, resolveCase, makeUid } = useApp()
+  const { cases, escalateCase, addCase, resolveCase, makeUid, role } = useApp()
   const [now, setNow] = useState(Date.now())
   const [draftTitle, setDraftTitle] = useState('')
   const [draftCitizen, setDraftCitizen] = useState('')
@@ -135,7 +135,7 @@ export default function Workflow() {
                   </div>
                 )}
                 {items.map((c) => (
-                  <CaseCard key={c.id} c={c} now={now} onResolve={() => resolveCase(c.id)} />
+                  <CaseCard key={c.id} c={c} now={now} onResolve={() => resolveCase(c.id)} supervisor={role === 'Supervisor'} />
                 ))}
               </div>
             </div>
@@ -146,14 +146,23 @@ export default function Workflow() {
   )
 }
 
-function CaseCard({ c, now, onResolve }) {
+function CaseCard({ c, now, onResolve, supervisor }) {
   const sla = slaCountdown(c.slaDeadline, now)
   const isOpen = ['In Progress', 'Pending Approval'].includes(c.status)
   const timerColor = sla.breached ? 'text-breach' : sla.urgent ? 'text-pending' : 'text-approved'
-  const cardBorder = c.status === 'Breached' ? 'border-breach/40 ring-1 ring-breach/20' : 'border-ink-100'
+  // Supervisors get a stronger visual on escalated cases (Change 3).
+  const supervisorFlag = supervisor && c.escalated
+  const cardBorder = c.status === 'Breached'
+    ? `border-breach/40 ring-1 ring-breach/20${supervisorFlag ? ' ring-2 ring-breach/50 shadow-panel' : ''}`
+    : 'border-ink-100'
 
   return (
     <div className={`card p-3.5 border ${cardBorder}`}>
+      {supervisorFlag && (
+        <div className="-mx-3.5 -mt-3.5 mb-2.5 px-3.5 py-1 bg-breach text-white text-[10px] font-bold uppercase tracking-wide rounded-t-xl flex items-center gap-1.5">
+          ▲ Supervisor attention — escalated
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="text-[11px] font-mono text-ink-500">{c.id}</div>
         {c.escalated && (

@@ -20,7 +20,7 @@ export const SOURCES = [
   },
   {
     id: 'SRC-02',
-    ref: 'TS Revenue Circular No. 14/2023',
+    ref: 'TS Revenue Circular No. 14/2023 · §4',
     title: 'Issuance of Income Certificates — Standard Operating Procedure',
     authority: 'Commissioner of Revenue, Govt. of Telangana',
     year: 2023,
@@ -152,7 +152,7 @@ export const KB = [
       te: 'ఈ సంవత్సరం నాకు ఖచ్చితంగా ఎంత సబ్సిడీ మొత్తం లభిస్తుంది?',
     },
     answer: {
-      en: 'The exact rupee amount depends on scheme notifications for the current financial year that are not present in the connected source library. I cannot ground this figure in a verified statute or circular.',
+      en: "Unverified — I can't ground this in an official source, so I won't state it as fact. The exact rupee amount depends on scheme notifications for the current financial year that are not present in the connected source library.",
       hi: 'सटीक राशि चालू वित्तीय वर्ष की योजना अधिसूचनाओं पर निर्भर करती है जो जुड़े स्रोत पुस्तकालय में मौजूद नहीं हैं। मैं इस आंकड़े को किसी सत्यापित क़ानून या परिपत्र में आधारित नहीं कर सकता।',
       te: 'ఖచ్చితమైన మొత్తం ప్రస్తుత ఆర్థిక సంవత్సర పథక నోటిఫికేషన్లపై ఆధారపడి ఉంటుంది, అవి అనుసంధానించిన మూల గ్రంథాలయంలో లేవు. ఈ సంఖ్యను ధృవీకరించిన చట్టం లేదా సర్క్యులర్‌లో నేను ఆధారం చూపలేను.',
     },

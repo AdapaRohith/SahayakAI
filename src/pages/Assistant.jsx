@@ -50,13 +50,24 @@ function AnswerText({ text, sources, onCite, activeIndex }) {
   )
 }
 
+// Pre-loaded example so a first-time visitor immediately sees a grounded,
+// cited answer working (Change 1). Display-only — not re-logged to the audit
+// trail (the seed already carries the matching verified entry).
+function seedExchange() {
+  const kb = KB.find((k) => k.id === 'KB-01') // income certificate — grounded
+  return [
+    { id: 'seed_u', role: 'user', text: kb.q.en },
+    { id: 'seed_a', role: 'assistant', text: kb.answer.en, sources: kb.citations, grounded: true, kbId: kb.id },
+  ]
+}
+
 export default function Assistant() {
   const { log } = useApp()
   const [lang, setLang] = useState('en')
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState([])
-  const [activeCite, setActiveCite] = useState({ msgId: null, index: null })
-  const [panel, setPanel] = useState({ sources: [], unverified: false })
+  const [messages, setMessages] = useState(seedExchange)
+  const [activeCite, setActiveCite] = useState({ msgId: 'seed_a', index: 0 })
+  const [panel, setPanel] = useState({ sources: ['SRC-02'], unverified: false })
   const t = UI[lang]
   const scrollRef = useRef(null)
 
@@ -174,18 +185,18 @@ export default function Assistant() {
                 <div key={m.id} className="flex justify-start">
                   <div
                     className={`max-w-[92%] rounded-2xl rounded-bl-sm px-4 py-3 border ${
-                      m.grounded ? 'bg-white border-ink-100' : 'bg-breach-bg/50 border-breach/30'
+                      m.grounded ? 'bg-white border-ink-100' : 'bg-pending-bg/70 border-pending/40'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="flex h-5 w-5 items-center justify-center rounded bg-teal-600 text-white">
-                        <Shield className="h-3 w-3" />
+                      <span className={`flex h-5 w-5 items-center justify-center rounded text-white ${m.grounded ? 'bg-teal-600' : 'bg-pending'}`}>
+                        {m.grounded ? <Shield className="h-3 w-3" /> : <WarnIcon />}
                       </span>
                       <span className="text-xs font-bold text-indigo-900">SahayakAI</span>
                       {m.grounded ? (
                         <span className="chip bg-approved-bg text-approved">✓ Grounded</span>
                       ) : (
-                        <span className="chip bg-breach-bg text-breach">⚠ Unverified</span>
+                        <span className="chip bg-pending-bg text-pending">⚠ Unverified</span>
                       )}
                     </div>
 
@@ -207,7 +218,7 @@ export default function Assistant() {
                     </div>
 
                     {!m.grounded && (
-                      <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-breach">
+                      <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-pending">
                         <span>⚠</span> {t.unverified}
                       </div>
                     )}
@@ -226,7 +237,7 @@ export default function Assistant() {
                         </span>
                       ) : (
                         <span>
-                          <span className="font-semibold text-breach">Why flagged:</span> no matching source in the
+                          <span className="font-semibold text-pending">Why flagged:</span> no matching source in the
                           verified library · refusal logged to the audit trail.
                         </span>
                       )}
@@ -237,8 +248,28 @@ export default function Assistant() {
             )}
           </div>
 
+          {/* Always-visible quick prompts — the last chip is the ungrounded
+              query, so the refusal behaviour is reachable at any time. */}
+          <div className="border-t border-ink-100 px-3 pt-2.5 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">{t.tryAsking}</span>
+            {suggestions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => submit(s.q[lang])}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  s.grounded
+                    ? 'border-ink-300 hover:border-teal-500 hover:bg-teal-500/5 text-ink-700'
+                    : 'border-pending/40 bg-pending-bg/40 text-pending hover:bg-pending-bg/70'
+                }`}
+              >
+                {!s.grounded && '⚠ '}
+                {s.q[lang].length > 42 ? `${s.q[lang].slice(0, 42)}…` : s.q[lang]}
+              </button>
+            ))}
+          </div>
+
           {/* Composer */}
-          <div className="border-t border-ink-100 p-3">
+          <div className="p-3">
             <div className="flex items-end gap-2">
               <button
                 onClick={listening ? stop : start}
@@ -294,6 +325,14 @@ function MicIcon() {
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="9" y="3" width="6" height="11" rx="3" />
       <path d="M5 11a7 7 0 0014 0M12 18v3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function WarnIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
 }

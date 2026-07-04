@@ -6,8 +6,8 @@ import { fmtTime } from '../lib/utils.js'
 
 // Metadata per action type: label, color, icon glyph.
 const ACTIONS = {
-  query_answered: { label: 'Query answered', tone: 'teal', glyph: '💬' },
-  query_flagged: { label: 'Query flagged (unverified)', tone: 'breach', glyph: '⚠' },
+  query_answered: { label: 'Verified citation', tone: 'teal', glyph: '💬' },
+  query_flagged: { label: 'Unverified flag', tone: 'pending', glyph: '⚠' },
   doc_drafted: { label: 'Document drafted', tone: 'indigo', glyph: '📝' },
   doc_approved: { label: 'Document approved & issued', tone: 'approved', glyph: '✓' },
   doc_requested_changes: { label: 'Changes requested', tone: 'pending', glyph: '↺' },
@@ -98,16 +98,25 @@ export default function Audit() {
           {rows.length === 0 && (
             <div className="p-10 text-center text-sm text-ink-500">No entries match your filter.</div>
           )}
-          <ol className="divide-y divide-ink-100">
-            {rows.map((e) => {
+          <ol>
+            {rows.map((e, i) => {
               const meta = ACTIONS[e.action] || { label: e.action, tone: 'indigo', glyph: '•' }
+              const isLast = i === rows.length - 1
               return (
-                <li key={e.id} className="relative flex gap-4 px-5 py-4 hover:bg-ink-100/40 transition-colors">
-                  {/* Timeline rail dot */}
+                <li key={e.id} className={`relative flex gap-4 px-5 py-4 hover:bg-ink-100/40 transition-colors ${isLast ? '' : 'border-b border-ink-100'}`}>
+                  {/* Timeline rail: dot + vertical connector that visualises the
+                      hash chain linking this entry to the one below it. */}
                   <div className="flex flex-col items-center pt-1">
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-white text-sm ${TONE_DOT[meta.tone]}`}>
+                    <span className={`z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-sm ${TONE_DOT[meta.tone]}`}>
                       {meta.glyph}
                     </span>
+                    {!isLast && (
+                      <span
+                        aria-hidden
+                        className="w-0.5 flex-1 mt-1 rounded bg-gradient-to-b from-indigo-600/50 to-indigo-600/10"
+                        title="Hash chain link"
+                      />
+                    )}
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -137,8 +146,8 @@ export default function Audit() {
                       )}
 
                       {'verified' in (e.meta || {}) && (
-                        <span className={`chip ${e.meta.verified ? 'bg-approved-bg text-approved' : 'bg-breach-bg text-breach'}`}>
-                          {e.meta.verified ? '✓ Verified citation' : '⚠ Unverified'}
+                        <span className={`chip ${e.meta.verified ? 'bg-approved-bg text-approved' : 'bg-pending-bg text-pending'}`}>
+                          {e.meta.verified ? '✓ Verified citation' : '⚠ Unverified flag'}
                         </span>
                       )}
                     </div>
