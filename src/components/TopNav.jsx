@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { googleLogout } from '@react-oauth/google'
 import { useApp } from '../store/AppContext.jsx'
 import { useAudit } from '../lib/queries.js'
 import { Shield } from './ui.jsx'
@@ -22,11 +23,18 @@ const NAV = [
 const ROLES = ['Citizen', 'Officer', 'Supervisor']
 
 export default function TopNav() {
-  const { role, setRole } = useApp()
+  const { role, setRole, user, logout } = useApp()
+  const navigate = useNavigate()
   const auditQ = useAudit()
   const auditCount = auditQ.data?.length ?? 0
   const allowed = ROLE_ROUTES[role]
   const links = NAV.filter((n) => allowed.includes(n.to))
+
+  function handleLogout() {
+    googleLogout()
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <header className="sticky top-0 z-40 bg-indigo-900 text-white shadow-panel">
@@ -85,6 +93,36 @@ export default function TopNav() {
                 ))}
               </select>
             </label>
+
+            {/* Signed-in Google user + logout */}
+            {user && (
+              <div className="flex items-center gap-2 pl-2 sm:border-l sm:border-indigo-700/60">
+                {user.picture ? (
+                  <img
+                    src={user.picture}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="h-8 w-8 rounded-full border border-indigo-700 object-cover"
+                  />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-sm font-bold">
+                    {(user.name || '?').charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <div className="hidden sm:block leading-tight max-w-[140px]">
+                  <div className="text-xs font-semibold truncate">{user.name}</div>
+                  <div className="text-[10px] text-indigo-200 truncate">{user.email}</div>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Sign out"
+                  className="rounded-lg p-1.5 text-indigo-100/80 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  aria-label="Sign out"
+                >
+                  <LogoutIcon />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -106,5 +144,13 @@ export default function TopNav() {
         </nav>
       </div>
     </header>
+  )
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M15 17l5-5-5-5M20 12H9M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }

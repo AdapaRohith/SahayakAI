@@ -41,7 +41,7 @@ export default function Assistant() {
   const t = UI[lang]
   const scrollRef = useRef(null)
 
-  const { supported, listening, start, stop } = useSpeech(lang, (transcript, isFinal) => {
+  const { supported, listening, error: micError, start, stop } = useSpeech(lang, (transcript, isFinal) => {
     setInput(transcript)
     if (isFinal) setTimeout(() => submit(transcript), 150)
   })
@@ -257,11 +257,19 @@ export default function Assistant() {
                 {t.send}
               </button>
             </div>
-            {!supported && (
+            {micError ? (
+              <p className="text-[11px] text-breach mt-1.5 px-1 flex items-center gap-1.5" role="alert">
+                <span>⚠</span> {micError}
+              </p>
+            ) : listening ? (
+              <p className="text-[11px] text-teal-700 mt-1.5 px-1 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-teal-600 animate-pulseDot" /> Listening — speak now.
+              </p>
+            ) : !supported ? (
               <p className="text-[11px] text-ink-500 mt-1.5 px-1">
                 Voice uses the browser Web Speech API — available in Chrome/Edge. Type your question above.
               </p>
-            )}
+            ) : null}
           </div>
         </div>
 

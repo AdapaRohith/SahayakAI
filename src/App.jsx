@@ -1,11 +1,23 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav, { ROLE_ROUTES } from './components/TopNav.jsx'
 import { useApp } from './store/AppContext.jsx'
-import Assistant from './pages/Assistant.jsx'
-import Officer from './pages/Officer.jsx'
-import Workflow from './pages/Workflow.jsx'
-import Audit from './pages/Audit.jsx'
-import Admin from './pages/Admin.jsx'
+
+const Login = lazy(() => import('./pages/Login.jsx'))
+const Assistant = lazy(() => import('./pages/Assistant.jsx'))
+const Officer = lazy(() => import('./pages/Officer.jsx'))
+const Workflow = lazy(() => import('./pages/Workflow.jsx'))
+const Audit = lazy(() => import('./pages/Audit.jsx'))
+const Admin = lazy(() => import('./pages/Admin.jsx'))
+
+function PageFallback() {
+  return <div className="py-20 text-center text-sm text-ink-500">Loading…</div>
+}
+
+// Auth gate toggle. Kept OFF during testing so we don't sign in on every reload.
+// Flip VITE_REQUIRE_AUTH=true (or set the default below to true) to re-enable
+// the Google login gate before shipping. All login code stays wired.
+const REQUIRE_AUTH = import.meta.env.VITE_REQUIRE_AUTH === 'true'
 
 // Blocks a route the current role is not permitted to see (visible RBAC).
 function Guard({ path, children }) {
@@ -31,8 +43,16 @@ function AccessDenied({ path }) {
   )
 }
 
-export default function App() {
+// Authenticated application shell (nav + routed pages + footer). Redirects to
+// /login when there is no signed-in Google user.
+function AuthedShell() {
+  const { isAuthed } = useApp()
   const location = useLocation()
+
+  if (REQUIRE_AUTH && !isAuthed) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
@@ -58,5 +78,16 @@ export default function App() {
         </div>
       </footer>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/*" element={<AuthedShell />} />
+      </Routes>
+    </Suspense>
   )
 }

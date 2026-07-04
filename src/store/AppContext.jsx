@@ -1,14 +1,16 @@
 import { createContext, useContext, useState, useCallback, useMemo } from 'react'
+import { jwtDecode } from 'jwt-decode'
 
 // ---------------------------------------------------------------------------
-// Tiny role/actor store. All domain data now lives in the GovAssist backend and
-// is fetched via TanStack Query; this context only tracks the current role,
-// which drives the visible-RBAC navigation and the `actor` sent on every call.
-//
-// Backend roles: citizen | officer | supervisor | admin (§18 R7).
+// Auth + role/actor store.
+//   - Identity comes from Google Sign-In (a JWT credential we decode client
+//     side). Persisted to localStorage so a refresh keeps you signed in.
+//   - Role drives the visible-RBAC navigation and the `actor` sent on every
+//     backend call. Backend roles: citizen | officer | supervisor | admin.
 // ---------------------------------------------------------------------------
 
 const AppContext = createContext(null)
+const STORAGE_KEY = 'sahayak.auth'
 
 // UI role label -> the actor string the backend expects.
 const ACTOR_FOR = {
@@ -17,18 +19,57 @@ const ACTOR_FOR = {
   Supervisor: 'supervisor',
 }
 
+function loadUser() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export function AppProvider({ children }) {
+  const [user, setUser] = useState(loadUser) // { name, email, picture, sub } | null
   const [role, setRole] = useState('Supervisor') // Citizen | Officer | Supervisor
 
-  const changeRole = useCallback((r) => setRole(r), [])
+  // Accept a Google credential (JWT), decode the profile, and persist it.
+  const login = useCallback((credential) => {
+    try {
+      const p = jwtDecode(credential)
+      const profile = {
+        name: p.name || p.email || 'Signed-in user',
+        email: p.email || '',
+        picture: p.picture || '',
+        sub: p.sub || '',
+      }
+      setUser(profile)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
+      return profile
+    } catch {
+      return null
+    }
+  }, [])
+
+  const logout = useCallback(() => {
+    setUser(null)
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const value = useMemo(
     () => ({
+      user,
+      isAuthed: !!user,
+      login,
+      logout,
       role,
       actor: ACTOR_FOR[role] ?? 'citizen',
-      setRole: changeRole,
+      setRole,
     }),
-    [role, changeRole],
+    [user, login, logout, role],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
