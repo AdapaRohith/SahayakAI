@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useAudit } from '../lib/queries.js'
+import { useT } from '../lib/i18n.js'
 import { SectionTitle, Shield } from '../components/ui.jsx'
 import { fmtTime, shortHash } from '../lib/utils.js'
 
@@ -29,6 +30,7 @@ const TONE_CHIP = {
 
 export default function Audit() {
   const auditQ = useAudit()
+  const t = useT().audit
   const [filter, setFilter] = useState('all')
   const [query, setQuery] = useState('')
 
@@ -71,12 +73,12 @@ export default function Audit() {
   return (
     <div>
       <SectionTitle
-        eyebrow="Immutable Audit Trail"
-        title="Every action, permanently recorded"
-        subtitle="Append-only and read-only (§18 R4). Each row is chained to the one before it for a tamper-evident view — nothing here can be edited or deleted."
+        eyebrow={t.eyebrow}
+        title={t.title}
+        subtitle={t.subtitle}
         right={
           <span className="chip bg-ink-950 text-white flex items-center gap-1.5">
-            <Shield className="h-3.5 w-3.5" /> {audit.length} entries · read-only
+            <Shield className="h-3.5 w-3.5" /> {t.entriesReadonly(audit.length)}
           </span>
         }
       />
@@ -87,7 +89,7 @@ export default function Audit() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search actor, action, or summary…"
+            placeholder={t.searchPlaceholder}
             className="w-full rounded-lg border border-ink-300 pl-9 pr-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors"
           />
           <svg viewBox="0 0 24 24" className="h-4 w-4 absolute left-3 top-2.5 text-ink-500" fill="none" stroke="currentColor" strokeWidth="2">
@@ -99,19 +101,19 @@ export default function Audit() {
           onChange={(e) => setFilter(e.target.value)}
           className="rounded-lg border border-ink-300 px-3 py-2 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
         >
-          <option value="all">All actions ({audit.length})</option>
+          <option value="all">{t.allActions(audit.length)}</option>
           {Object.entries(ACTIONS).map(([k, v]) => (
-            <option key={k} value={k}>{v.label} ({counts[k] || 0})</option>
+            <option key={k} value={k}>{t.actions[k] || v.label} ({counts[k] || 0})</option>
           ))}
         </select>
       </div>
 
       {/* Timeline */}
       <div className="card p-0 overflow-hidden">
-        {auditQ.isLoading && <div className="p-10 text-center text-sm text-ink-500">Loading audit log…</div>}
-        {auditQ.isError && <div className="p-10 text-center text-sm text-breach">Could not load audit: {auditQ.error.message}</div>}
+        {auditQ.isLoading && <div className="p-10 text-center text-sm text-ink-500">{t.loading}</div>}
+        {auditQ.isError && <div className="p-10 text-center text-sm text-breach">{t.loadError(auditQ.error.message)}</div>}
         {!auditQ.isLoading && !auditQ.isError && rows.length === 0 && (
-          <div className="p-10 text-center text-sm text-ink-500">No entries match your filter.</div>
+          <div className="p-10 text-center text-sm text-ink-500">{t.noMatch}</div>
         )}
         <ol>
           {rows.map((e, i) => {
@@ -131,7 +133,7 @@ export default function Audit() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`chip ${TONE_CHIP[meta.tone]}`}>{meta.label}</span>
+                    <span className={`chip ${TONE_CHIP[meta.tone]}`}>{t.actions[e.action] || meta.label}</span>
                     <span className="text-[11px] font-mono text-ink-500">#{e.id}</span>
                     <span className="text-[11px] text-ink-500 ml-auto">{fmtTime(e.ts)}</span>
                   </div>
@@ -140,14 +142,14 @@ export default function Audit() {
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-xs">
                     <span className="text-ink-500">
-                      Actor:{' '}
+                      {t.actor}{' '}
                       <span className="font-semibold text-ink-950">{e.actor}</span>
                     </span>
                   </div>
 
                   {/* Tamper-evidence hash chain */}
                   <div className="mt-2.5 flex items-center gap-2 text-[10px] font-mono text-ink-500">
-                    <span className="text-ink-400">prev</span>
+                    <span className="text-ink-400">{t.prev}</span>
                     <code className="rounded bg-ink-100 px-1.5 py-0.5">{chain.prevHash}</code>
                     <span className="text-ink-400">→</span>
                     <span className="flex items-center gap-1 rounded bg-ink-950 px-1.5 py-0.5 text-white font-bold">
@@ -162,9 +164,7 @@ export default function Audit() {
       </div>
 
       <p className="text-[11px] text-ink-500 mt-3 px-1">
-        Each row's hash is derived from its contents plus the previous row's hash (FNV-1a). Editing any
-        past entry changes its hash and breaks every link after it — which is why the log is tamper-evident
-        and shown read-only.
+        {t.footerNote}
       </p>
     </div>
   )

@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { googleLogout } from '@react-oauth/google'
 import { useApp } from '../store/AppContext.jsx'
 import { useAudit } from '../lib/queries.js'
+import { useT, LANGS } from '../lib/i18n.js'
 import { Shield } from './ui.jsx'
 
 // Which modules each role may see. This is the visible half of RBAC —
@@ -13,18 +14,20 @@ export const ROLE_ROUTES = {
   Supervisor: ['/assistant', '/officer', '/workflow', '/audit', '/admin'],
 }
 
+// Route -> i18n key (t.nav[key]) so tab labels translate with the language.
 const NAV = [
-  { to: '/assistant', label: 'Assistant', hint: 'Citizen' },
-  { to: '/officer', label: 'Officer Copilot', hint: 'Draft' },
-  { to: '/workflow', label: 'Workflow & SLA', hint: 'Cases' },
-  { to: '/audit', label: 'Audit Trail', hint: 'Immutable' },
-  { to: '/admin', label: 'Analytics', hint: 'Supervisor' },
+  { to: '/assistant', key: 'assistant' },
+  { to: '/officer', key: 'officer' },
+  { to: '/workflow', key: 'workflow' },
+  { to: '/audit', key: 'audit' },
+  { to: '/admin', key: 'analytics' },
 ]
 
 const ROLES = ['Citizen', 'Officer', 'Supervisor']
 
 export default function TopNav() {
-  const { role, setRole, user, logout } = useApp()
+  const { role, setRole, user, logout, lang, setLang } = useApp()
+  const t = useT()
   const navigate = useNavigate()
   const location = useLocation()
   const auditQ = useAudit()
@@ -82,7 +85,7 @@ export default function TopNav() {
             </span>
             <div className="leading-tight">
               <div className="font-extrabold tracking-tight text-ink-950">SahayakAI</div>
-              <div className="text-[10px] uppercase tracking-widest text-ink-400">Govt AI Copilot</div>
+              <div className="text-[10px] uppercase tracking-widest text-ink-400">{t.nav.tagline}</div>
             </div>
           </div>
 
@@ -101,7 +104,7 @@ export default function TopNav() {
                   }`
                 }
               >
-                {n.label}
+                {t.nav[n.key]}
               </NavLink>
             ))}
             <span
@@ -119,24 +122,39 @@ export default function TopNav() {
             {/* Live audit counter — reinforces "every action is logged" */}
             <div className="hidden lg:flex items-center gap-1.5 text-xs text-ink-500">
               <span className="h-2 w-2 rounded-full bg-accent-600 animate-pulseDot" />
-              {auditCount} audited actions
+              {t.nav.auditedActions(auditCount)}
             </div>
 
             {/* Trust badge — nothing is issued without a human approval */}
             <span className="hidden xl:inline-flex chip border border-ink-300 text-ink-700 font-bold">
-              ✓ 100% human-approved
+              {t.nav.humanApproved}
             </span>
+
+            {/* Language switcher — applies across every page */}
+            <label className="flex items-center gap-2">
+              <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-ink-400">{t.nav.language}</span>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value)}
+                aria-label={t.nav.language}
+                className="rounded-lg bg-white border border-ink-300 text-ink-900 text-sm font-semibold px-2.5 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
+              >
+                {LANGS.map((l) => (
+                  <option key={l.id} value={l.id}>{l.native}</option>
+                ))}
+              </select>
+            </label>
 
             {/* Role switcher (RBAC) */}
             <label className="flex items-center gap-2">
-              <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-ink-400">Role</span>
+              <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-ink-400">{t.nav.role}</span>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 className="rounded-lg bg-white border border-ink-300 text-ink-900 text-sm font-semibold px-2.5 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
               >
                 {ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r} value={r}>{t.nav.roles[r]}</option>
                 ))}
               </select>
             </label>
@@ -162,9 +180,9 @@ export default function TopNav() {
                 </div>
                 <button
                   onClick={handleLogout}
-                  title="Sign out"
+                  title={t.nav.signOut}
                   className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-950 transition-colors"
-                  aria-label="Sign out"
+                  aria-label={t.nav.signOut}
                 >
                   <LogoutIcon />
                 </button>
@@ -185,7 +203,7 @@ export default function TopNav() {
                 }`
               }
             >
-              {n.label}
+              {t.nav[n.key]}
             </NavLink>
           ))}
         </nav>

@@ -2,27 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { useChat } from '../lib/queries.js'
 import { useSpeech } from '../lib/useSpeech.js'
+import { useT } from '../lib/i18n.js'
 import CitationPanel from '../components/CitationPanel.jsx'
 import { SectionTitle, Shield } from '../components/ui.jsx'
-
-const LANGS = [
-  { id: 'en', native: 'English' },
-  { id: 'hi', native: 'हिन्दी' },
-  { id: 'te', native: 'తెలుగు' },
-]
-
-const UI = {
-  en: { placeholder: 'Ask about mutation, certificates, RTI, land records…', send: 'Send', listening: 'Listening…', tryAsking: 'Try asking' },
-  hi: { placeholder: 'म्यूटेशन, प्रमाण पत्र, RTI, भूमि रिकॉर्ड के बारे में पूछें…', send: 'भेजें', listening: 'सुन रहा हूँ…', tryAsking: 'यह पूछकर देखें' },
-  te: { placeholder: 'మ్యుటేషన్, ధృవీకరణ పత్రాలు, RTI, భూమి రికార్డుల గురించి అడగండి…', send: 'పంపండి', listening: 'వింటున్నాను…', tryAsking: 'ఇలా అడగండి' },
-}
-
-const SUGGESTIONS = [
-  'What is the process for land mutation in Kadapa?',
-  'How do I apply for an income certificate?',
-  'How long does an RTI reply take?',
-  'How do I correct a wrong entry in my land record?',
-]
 
 // Turn [1],[2] markers (if the backend adds them) into small superscripts.
 function AnswerText({ text }) {
@@ -30,14 +12,14 @@ function AnswerText({ text }) {
 }
 
 export default function Assistant() {
-  const { actor } = useApp()
+  const { actor, lang } = useApp()
   const chat = useChat()
-  const [lang, setLang] = useState('en')
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [activeRef, setActiveRef] = useState(null)
   const [panel, setPanel] = useState({ citations: [], usedChunks: [] })
-  const t = UI[lang]
+  const t = useT()
+  const ta = t.assistant
   const scrollRef = useRef(null)
 
   const { supported, listening, error: micError, start, stop } = useSpeech(lang, (transcript, isFinal) => {
@@ -72,7 +54,7 @@ export default function Assistant() {
     } catch (err) {
       setMessages((m) => [
         ...m,
-        { id: `e_${Date.now()}`, role: 'assistant', error: true, text: `Could not reach the assistant. ${err.message}`, citations: [], usedChunks: [] },
+        { id: `e_${Date.now()}`, role: 'assistant', error: true, text: ta.errorReach(err.message), citations: [], usedChunks: [] },
       ])
     }
   }
@@ -80,25 +62,9 @@ export default function Assistant() {
   return (
     <div>
       <SectionTitle
-        eyebrow="Citizen Assistant"
-        title="Ask a question — get a grounded, cited answer"
-        subtitle="Answers are retrieved from government policy sources (RAG) and every reply carries at least one citation. Multilingual and voice-enabled."
-        right={
-          <div className="flex items-center gap-1 rounded-lg bg-white border border-ink-300 p-1">
-            {LANGS.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => setLang(l.id)}
-                aria-pressed={lang === l.id}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all duration-150 active:scale-[0.97] ${
-                  lang === l.id ? 'bg-accent-700 text-white' : 'text-ink-700 hover:bg-ink-100'
-                }`}
-              >
-                {l.native}
-              </button>
-            ))}
-          </div>
-        }
+        eyebrow={ta.eyebrow}
+        title={ta.title}
+        subtitle={ta.subtitle}
       />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -110,9 +76,9 @@ export default function Assistant() {
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600 text-white mb-4 shadow-sm">
                   <Shield className="h-7 w-7" />
                 </span>
-                <h3 className="text-lg font-bold text-ink-950">How can I help you today?</h3>
+                <h3 className="text-lg font-bold text-ink-950">{ta.emptyTitle}</h3>
                 <p className="text-sm text-ink-500 mt-1 max-w-sm">
-                  I answer from verified government policy sources. Tap the mic to speak in your language.
+                  {ta.emptySub}
                 </p>
               </div>
             )}
@@ -135,9 +101,9 @@ export default function Assistant() {
                       <span className="flex h-5 w-5 items-center justify-center rounded bg-ink-900 text-white">
                         <Shield className="h-3 w-3" />
                       </span>
-                      <span className="text-xs font-bold text-ink-900">GovAssist AI</span>
+                      <span className="text-xs font-bold text-ink-900">{ta.botName}</span>
                       {!m.error && m.citations.length > 0 && (
-                        <span className="chip bg-approved-bg text-approved">✓ {m.citations.length} source{m.citations.length > 1 ? 's' : ''}</span>
+                        <span className="chip bg-approved-bg text-approved">{ta.sources(m.citations.length)}</span>
                       )}
                     </div>
 
@@ -168,8 +134,7 @@ export default function Assistant() {
 
                     {!m.error && (
                       <div className="mt-2.5 pt-2 border-t border-ink-100 text-[11px] text-ink-500">
-                        <span className="font-semibold text-accent-800">Why trustworthy:</span> grounded in{' '}
-                        {m.citations.length} retrieved policy source{m.citations.length > 1 ? 's' : ''} · logged to the audit trail.
+                        <span className="font-semibold text-accent-800">{ta.whyLabel}</span> {ta.whyBody(m.citations.length)}
                       </div>
                     )}
                   </div>
@@ -181,7 +146,7 @@ export default function Assistant() {
               <div className="flex justify-start animate-fadeUp">
                 <div className="rounded-2xl rounded-bl-sm bg-white border border-ink-200 px-4 py-3 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-accent-600 animate-pulseDot" />
-                  <span className="text-sm text-ink-500">Retrieving grounded sources…</span>
+                  <span className="text-sm text-ink-500">{ta.retrieving}</span>
                 </div>
               </div>
             )}
@@ -189,8 +154,8 @@ export default function Assistant() {
 
           {/* Quick prompts */}
           <div className="border-t border-ink-100 px-3 pt-2.5 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">{t.tryAsking}</span>
-            {SUGGESTIONS.map((s) => (
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">{ta.tryAsking}</span>
+            {ta.suggestions.map((s) => (
               <button
                 key={s}
                 onClick={() => submit(s)}
@@ -226,11 +191,11 @@ export default function Assistant() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
                 }}
-                placeholder={listening ? t.listening : t.placeholder}
+                placeholder={listening ? ta.listening : ta.placeholder}
                 className="flex-1 resize-none rounded-xl border border-ink-300 px-3.5 py-2.5 text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors max-h-32"
               />
               <button onClick={() => submit()} disabled={chat.isPending} className="btn-primary h-11 rounded-xl">
-                {t.send}
+                {ta.send}
               </button>
             </div>
             {micError ? (
@@ -239,11 +204,11 @@ export default function Assistant() {
               </p>
             ) : listening ? (
               <p className="text-[11px] text-accent-800 mt-1.5 px-1 flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent-600 animate-pulseDot" /> Listening — speak now.
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-600 animate-pulseDot" /> {ta.listenNow}
               </p>
             ) : !supported ? (
               <p className="text-[11px] text-ink-500 mt-1.5 px-1">
-                Voice uses the browser Web Speech API — available in Chrome/Edge. Type your question above.
+                {ta.voiceUnsupported}
               </p>
             ) : null}
           </div>
@@ -258,8 +223,7 @@ export default function Assistant() {
             onSelect={setActiveRef}
           />
           <p className="text-[11px] text-ink-500 mt-3 px-1 leading-relaxed">
-            Click any citation to read the retrieved source text. Every question is written to the
-            audit trail — see <span className="font-semibold text-ink-800">Audit Trail</span>.
+            {ta.citationNote} <span className="font-semibold text-ink-800">{ta.auditTrailLink}</span>.
           </p>
         </div>
       </div>

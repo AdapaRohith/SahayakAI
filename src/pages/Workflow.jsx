@@ -2,15 +2,17 @@ import { useEffect, useState, useMemo } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { api } from '../api.js'
 import { useCases, useCreateCase, useAdvanceCase, useEscalateCase } from '../lib/queries.js'
+import { useT } from '../lib/i18n.js'
 import { SectionTitle, StatusBadge, Stat, Shield } from '../components/ui.jsx'
 import { fmtDate } from '../lib/utils.js'
 
 // Kanban columns derived from backend case status + escalation flag.
+// `labelKey` -> t.workflow[labelKey] so column headers translate.
 const COLUMNS = [
-  { key: 'open', label: 'Open', tone: 'pending', match: (c) => c.status === 'open' && !c.escalated },
-  { key: 'drafting', label: 'In progress', tone: 'pending', match: (c) => c.status === 'drafting' && !c.escalated },
-  { key: 'escalated', label: 'Escalated', tone: 'breach', match: (c) => c.escalated },
-  { key: 'issued', label: 'Issued', tone: 'approved', match: (c) => c.status === 'issued' },
+  { key: 'open', labelKey: 'colOpen', tone: 'pending', match: (c) => c.status === 'open' && !c.escalated },
+  { key: 'drafting', labelKey: 'colDrafting', tone: 'pending', match: (c) => c.status === 'drafting' && !c.escalated },
+  { key: 'escalated', labelKey: 'colEscalated', tone: 'breach', match: (c) => c.escalated },
+  { key: 'issued', labelKey: 'colIssued', tone: 'approved', match: (c) => c.status === 'issued' },
 ]
 
 const SLA_COLOR = { green: 'text-approved', amber: 'text-pending', red: 'text-breach', done: 'text-ink-500' }
@@ -26,6 +28,7 @@ function fmtDuration(ms) {
 
 export default function Workflow() {
   const { actor, role } = useApp()
+  const t = useT().workflow
   const casesQ = useCases()
   const createMut = useCreateCase()
   const advanceMut = useAdvanceCase()
@@ -67,7 +70,7 @@ export default function Workflow() {
     e.preventDefault()
     setFormError(null)
     if (!title.trim() || !citizen.trim()) {
-      setFormError('Title and citizen name are required.')
+      setFormError(t.requiredErr)
       return
     }
     try {
@@ -87,49 +90,49 @@ export default function Workflow() {
   return (
     <div>
       <SectionTitle
-        eyebrow="Workflow & SLA"
-        title="Case routing with live SLA countdowns"
-        subtitle="Cases move through a per-workflow state machine (Revenue Inspector → Tahsildar → Issued, etc.). SLA timers tick live; advance a case to the next stage or escalate it for supervisor attention."
+        eyebrow={t.eyebrow}
+        title={t.title}
+        subtitle={t.subtitle}
       />
 
       <div className="grid gap-4 sm:grid-cols-3 mb-5">
-        <Stat label="Open cases" value={stats.open} tone="warn" sub="Open / in progress" />
-        <Stat label="SLA breached" value={stats.breached} tone="bad" sub="Past deadline (red)" />
-        <Stat label="Escalated" value={stats.escalated} tone="bad" sub="Raised to supervisor" />
+        <Stat label={t.statOpen} value={stats.open} tone="warn" sub={t.statOpenSub} />
+        <Stat label={t.statBreached} value={stats.breached} tone="bad" sub={t.statBreachedSub} />
+        <Stat label={t.statEscalated} value={stats.escalated} tone="bad" sub={t.statEscalatedSub} />
       </div>
 
       {/* File a new case — backend auto-classifies the workflow */}
       <form onSubmit={fileCase} className="card p-4 mb-6">
         <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] items-end">
           <div>
-            <label className="field-label">New case — describe the request</label>
+            <label className="field-label">{t.newCaseLabel}</label>
             <input
               value={title}
               onChange={(e) => { setTitle(e.target.value); setPreview(null) }}
-              placeholder="e.g. Transfer my father's land to my name / income certificate for PM-KISAN"
+              placeholder={t.describePlaceholder}
               className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors"
             />
           </div>
           <div>
-            <label className="field-label">Citizen name</label>
+            <label className="field-label">{t.citizenName}</label>
             <input
               value={citizen}
               onChange={(e) => setCitizen(e.target.value)}
-              placeholder="Required"
+              placeholder={t.requiredPlaceholder}
               className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors"
             />
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={classify} className="btn-ghost h-[38px]">Preview route</button>
+            <button type="button" onClick={classify} className="btn-ghost h-[38px]">{t.previewRoute}</button>
             <button type="submit" disabled={createMut.isPending} className="btn-primary h-[38px]">
-              {createMut.isPending ? 'Filing…' : 'File case'}
+              {createMut.isPending ? t.filing : t.fileCase}
             </button>
           </div>
         </div>
         {preview && (
           <div className="mt-3 rounded-lg bg-ink-50 border border-ink-200 p-3 text-xs animate-fadeUp">
-            <span className="font-semibold text-ink-950">Classified as {preview.case_type}</span>
-            <span className="text-ink-500"> · {preview.department} · confidence {(preview.confidence * 100).toFixed(0)}%</span>
+            <span className="font-semibold text-ink-950">{t.classifiedAs(preview.case_type)}</span>
+            <span className="text-ink-500">{t.deptConf(preview.department, (preview.confidence * 100).toFixed(0))}</span>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {preview.route?.map((r, i) => (
                 <span key={i} className="chip bg-ink-100 text-ink-700 border border-ink-200">
@@ -148,7 +151,7 @@ export default function Workflow() {
           {COLUMNS.map((c) => <div key={c.key} className="h-40 skeleton !rounded-xl" />)}
         </div>
       ) : casesQ.isError ? (
-        <div className="card p-6 text-sm text-breach">Could not load cases: {casesQ.error.message}</div>
+        <div className="card p-6 text-sm text-breach">{t.loadError(casesQ.error.message)}</div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {COLUMNS.map((col) => {
@@ -156,7 +159,7 @@ export default function Workflow() {
             return (
               <div key={col.key} className="flex flex-col">
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <h3 className="font-bold text-sm text-ink-950">{col.label}</h3>
+                  <h3 className="font-bold text-sm text-ink-950">{t[col.labelKey]}</h3>
                   <span className={`chip ${
                     col.tone === 'breach' ? 'bg-breach-bg text-breach'
                     : col.tone === 'approved' ? 'bg-approved-bg text-approved'
@@ -166,18 +169,19 @@ export default function Workflow() {
                 <div className="space-y-3">
                   {items.length === 0 && (
                     <div className="rounded-lg border border-dashed border-ink-300 p-4 text-center text-xs text-ink-500">
-                      No cases
+                      {t.noCases}
                     </div>
                   )}
                   {items.map((c) => (
                     <CaseCard
                       key={c.id}
                       c={c}
+                      t={t}
                       now={now}
                       fetchedAt={fetchedAt}
                       supervisor={role === 'Supervisor'}
                       onAdvance={() => advanceMut.mutate({ id: c.id, actor })}
-                      onEscalate={() => escalateMut.mutate({ id: c.id, actor, reason: 'Flagged for supervisor attention' })}
+                      onEscalate={() => escalateMut.mutate({ id: c.id, actor, reason: t.escalateReason })}
                       advancing={advanceMut.isPending}
                     />
                   ))}
@@ -191,7 +195,7 @@ export default function Workflow() {
   )
 }
 
-function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
+function CaseCard({ c, t, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
   // sla_remaining_hours was accurate at fetch time; project it forward so the
   // timer ticks live between refetches.
   const deadlineMs = fetchedAt + c.sla_remaining_hours * 3_600_000
@@ -212,13 +216,13 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
     <div className={`card card-hover p-3.5 border ${cardBorder}`}>
       {supervisorFlag && (
         <div className="-mx-3.5 -mt-3.5 mb-2.5 px-3.5 py-1 bg-breach text-white text-[10px] font-bold uppercase tracking-wide rounded-t-xl flex items-center gap-1.5">
-          ▲ Supervisor attention — escalated
+          {t.supervisorAttention}
         </div>
       )}
       <div className="flex items-start justify-between gap-2">
         <div className="text-[11px] font-mono text-ink-500">#{c.id} · {c.case_type}</div>
         {c.escalated && (
-          <span className="chip bg-breach text-white animate-pulseDot">▲ Escalated</span>
+          <span className="chip bg-breach text-white animate-pulseDot">{t.escalated}</span>
         )}
       </div>
       <h4 className="font-semibold text-ink-950 text-sm leading-snug mt-1">{c.title}</h4>
@@ -231,7 +235,7 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
       {/* Stage / route progress */}
       <div className="mt-3">
         <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-ink-500">
-          <span>Stage: <span className="font-semibold text-ink-700">{c.stage}</span></span>
+          <span>{t.stage}: <span className="font-semibold text-ink-700">{c.stage}</span></span>
           <span>{Math.min(c.stage_index + 1, routeLen)}/{routeLen}</span>
         </div>
         <div className="mt-1 flex gap-1">
@@ -248,7 +252,7 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
       <div className="mt-3 pt-3 border-t border-ink-100 flex items-center justify-between">
         <div>
           <div className="text-[10px] uppercase tracking-wide text-ink-500">
-            {done ? 'SLA' : overdue ? 'Overdue by' : 'SLA remaining'}
+            {done ? t.slaLabel : overdue ? t.overdueBy : t.slaRemaining}
           </div>
           <div className={`font-mono font-bold text-sm ${timerColor}`}>
             {done ? '—' : `${overdue ? '+' : ''}${fmtDuration(remaining)}`}
@@ -259,13 +263,13 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
 
       {!isFinal && (
         <div className="mt-3 flex items-center gap-2">
-          <button onClick={onAdvance} className="btn-primary flex-1 py-1.5 text-xs">Advance →</button>
+          <button onClick={onAdvance} className="btn-primary flex-1 py-1.5 text-xs">{t.advance}</button>
           {!c.escalated && (
-            <button onClick={onEscalate} className="btn-ghost py-1.5 text-xs">Escalate</button>
+            <button onClick={onEscalate} className="btn-ghost py-1.5 text-xs">{t.escalate}</button>
           )}
         </div>
       )}
-      <div className="text-[10px] text-ink-500 mt-2">Filed {fmtDate(c.created_at)} · SLA {c.sla_hours}h · {c.assigned_role}</div>
+      <div className="text-[10px] text-ink-500 mt-2">{t.filed(fmtDate(c.created_at), c.sla_hours, c.assigned_role)}</div>
     </div>
   )
 }

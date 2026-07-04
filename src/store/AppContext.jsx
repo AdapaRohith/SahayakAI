@@ -11,6 +11,7 @@ import { jwtDecode } from 'jwt-decode'
 
 const AppContext = createContext(null)
 const STORAGE_KEY = 'sahayak.auth'
+const LANG_KEY = 'sahayak.lang'
 
 // UI role label -> the actor string the backend expects.
 const ACTOR_FOR = {
@@ -28,9 +29,28 @@ function loadUser() {
   }
 }
 
+function loadLang() {
+  try {
+    return localStorage.getItem(LANG_KEY) || 'en'
+  } catch {
+    return 'en'
+  }
+}
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(loadUser) // { name, email, picture, sub } | null
   const [role, setRole] = useState('Supervisor') // Citizen | Officer | Supervisor
+  const [lang, setLangState] = useState(loadLang) // en | hi | te — applies app-wide
+
+  // Persist the language choice so it applies across every page and survives a refresh.
+  const setLang = useCallback((next) => {
+    setLangState(next)
+    try {
+      localStorage.setItem(LANG_KEY, next)
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   // Accept a Google credential (JWT), decode the profile, and persist it.
   const login = useCallback((credential) => {
@@ -68,8 +88,10 @@ export function AppProvider({ children }) {
       role,
       actor: ACTOR_FOR[role] ?? 'citizen',
       setRole,
+      lang,
+      setLang,
     }),
-    [user, login, logout, role],
+    [user, login, logout, role, lang, setLang],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

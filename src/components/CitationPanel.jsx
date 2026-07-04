@@ -1,4 +1,5 @@
 import { Shield } from './ui.jsx'
+import { useT } from '../lib/i18n.js'
 
 // Side panel that renders the policy sources a chat answer was grounded in.
 // Data comes straight from the backend /api/chat response:
@@ -7,15 +8,15 @@ import { Shield } from './ui.jsx'
 // Clicking a citation expands the matching chunk content (client-side only,
 // no extra request).
 export default function CitationPanel({ citations = [], usedChunks = [], activeRef, onSelect }) {
+  const t = useT().citation
   if (!citations.length) {
     return (
       <aside className="card p-4">
         <div className="flex items-center gap-2 text-ink-500 font-semibold text-sm">
-          <Shield className="h-4 w-4" /> Sources
+          <Shield className="h-4 w-4" /> {t.sources}
         </div>
         <p className="text-xs text-ink-500 mt-2">
-          Ask a question to see the cited government sources here. Every answer is grounded in at
-          least one policy source.
+          {t.askToSee}
         </p>
       </aside>
     )
@@ -26,7 +27,7 @@ export default function CitationPanel({ citations = [], usedChunks = [], activeR
   return (
     <aside className="card p-4">
       <div className="flex items-center gap-2 text-ink-950 font-bold text-sm mb-3">
-        <Shield className="h-4 w-4" /> Cited sources
+        <Shield className="h-4 w-4" /> {t.citedSources}
         <span className="chip bg-ink-950 text-white ml-auto">{citations.length}</span>
       </div>
       <ol className="space-y-3">
@@ -55,7 +56,7 @@ export default function CitationPanel({ citations = [], usedChunks = [], activeR
                   </div>
                   {chunk && (
                     <div className="text-[11px] text-ink-600 mt-1 font-semibold">
-                      {active ? '▾ Hide source text' : '▸ Show source text'}
+                      {active ? t.hideText : t.showText}
                     </div>
                   )}
                 </div>

@@ -5,13 +5,14 @@ import {
 } from 'recharts'
 import { useApp } from '../store/AppContext.jsx'
 import { useAnalytics, useCases, useAudit } from '../lib/queries.js'
+import { useT } from '../lib/i18n.js'
 import { ROLE_ROUTES } from '../components/TopNav.jsx'
 import { SectionTitle, Stat } from '../components/ui.jsx'
 
 const ROLES = [
-  { id: 'Citizen', desc: 'Sees only the citizen Assistant.', icon: '👤' },
-  { id: 'Officer', desc: 'Assistant, Copilot, Workflow, Audit.', icon: '🧑‍💼' },
-  { id: 'Supervisor', desc: 'Full access including Analytics.', icon: '🛡️' },
+  { id: 'Citizen', icon: '👤' },
+  { id: 'Officer', icon: '🧑‍💼' },
+  { id: 'Supervisor', icon: '🛡️' },
 ]
 
 // --- Theme tokens for the charts -------------------------------------------
@@ -47,6 +48,9 @@ function ChartTip({ active, payload, label, unit = '' }) {
 
 export default function Admin() {
   const { role, setRole } = useApp()
+  const full = useT()
+  const t = full.admin
+  const tRole = full.nav.roles
   const analyticsQ = useAnalytics()
   const casesQ = useCases()
   const auditQ = useAudit()
@@ -61,12 +65,12 @@ export default function Admin() {
     const escalated = cases.filter((c) => c.escalated).length
     const issued = cases.filter((c) => c.status === 'issued').length
     return [
-      { name: 'Open', value: open, fill: STATUS_FILL.open },
-      { name: 'In progress', value: drafting, fill: STATUS_FILL.drafting },
-      { name: 'Escalated', value: escalated, fill: STATUS_FILL.escalated },
-      { name: 'Issued', value: issued, fill: STATUS_FILL.issued },
+      { name: t.caseOpen, value: open, fill: STATUS_FILL.open },
+      { name: t.caseInProgress, value: drafting, fill: STATUS_FILL.drafting },
+      { name: t.caseEscalated, value: escalated, fill: STATUS_FILL.escalated },
+      { name: t.caseIssued, value: issued, fill: STATUS_FILL.issued },
     ].filter((d) => d.value > 0)
-  }, [cases])
+  }, [cases, t])
   const totalCases = caseStatus.reduce((s, d) => s + d.value, 0)
 
   const byDept = useMemo(() => {
@@ -79,22 +83,22 @@ export default function Admin() {
     const m = {}
     for (const e of audit) m[e.action] = (m[e.action] || 0) + 1
     return Object.entries(m)
-      .map(([k, value]) => ({ name: ACTION_LABEL[k] || k, value }))
+      .map(([k, value]) => ({ name: t.actionLabel[k] || ACTION_LABEL[k] || k, value }))
       .sort((x, y) => y.value - x.value)
       .slice(0, 8)
-  }, [audit])
+  }, [audit, t])
 
   return (
     <div>
       <SectionTitle
-        eyebrow="Analytics · Role-Based Access & Program Health"
-        title="Access control and live analytics"
-        subtitle="Toggle a role to gate which modules are visible across the app. All figures are read live from the GovAssist backend."
+        eyebrow={t.eyebrow}
+        title={t.title}
+        subtitle={t.subtitle}
       />
 
       {/* Role toggle (visible RBAC) */}
       <div className="card p-4 mb-6">
-        <h3 className="font-bold text-ink-950 mb-3">Active role (RBAC)</h3>
+        <h3 className="font-bold text-ink-950 mb-3">{t.activeRole}</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           {ROLES.map((r) => {
             const active = role === r.id
@@ -108,10 +112,10 @@ export default function Admin() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-2xl">{r.icon}</span>
-                  {active && <span className="chip bg-ink-950 text-white">Active</span>}
+                  {active && <span className="chip bg-ink-950 text-white">{t.active}</span>}
                 </div>
-                <div className="font-bold text-ink-950 mt-2">{r.id}</div>
-                <div className="text-xs text-ink-500 mt-0.5">{r.desc}</div>
+                <div className="font-bold text-ink-950 mt-2">{tRole[r.id]}</div>
+                <div className="text-xs text-ink-500 mt-0.5">{t.roles[r.id]}</div>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {ROLE_ROUTES[r.id].map((p) => (
                     <span key={p} className="chip bg-ink-100 text-ink-700 text-[10px]">{p}</span>
@@ -123,22 +127,22 @@ export default function Admin() {
         </div>
       </div>
 
-      {analyticsQ.isLoading && <div className="card p-10 text-center text-sm text-ink-500">Loading analytics…</div>}
-      {analyticsQ.isError && <div className="card p-6 text-sm text-breach">Could not load analytics: {analyticsQ.error.message}</div>}
+      {analyticsQ.isLoading && <div className="card p-10 text-center text-sm text-ink-500">{t.loadingAnalytics}</div>}
+      {analyticsQ.isError && <div className="card p-6 text-sm text-breach">{t.analyticsError(analyticsQ.error.message)}</div>}
 
       {a && (
         <>
           {/* KPI strip */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
-            <Stat label="Total chats" value={a.total_chats} sub="Grounded Q&A" />
-            <Stat label="Drafts generated" value={a.total_drafts} sub={`${a.total_issued} issued`} />
-            <Stat label="Avg citations / answer" value={a.avg_citations} tone="good" sub="≥1 guaranteed (R2)" />
-            <Stat label="Docs human-approved" value="100%" tone="good" sub={`${a.total_issued} issued · 0 auto-issued`} />
-            <Stat label="Open cases" value={a.open_cases} tone="warn" sub={`${a.sla_breaches} SLA breaches · ${a.escalations} escalated`} />
+            <Stat label={t.statTotalChats} value={a.total_chats} sub={t.statTotalChatsSub} />
+            <Stat label={t.statDrafts} value={a.total_drafts} sub={t.statDraftsSub(a.total_issued)} />
+            <Stat label={t.statAvgCitations} value={a.avg_citations} tone="good" sub={t.statAvgCitationsSub} />
+            <Stat label={t.statHumanApproved} value="100%" tone="good" sub={t.statHumanApprovedSub(a.total_issued)} />
+            <Stat label={t.statOpenCases} value={a.open_cases} tone="warn" sub={t.statOpenCasesSub(a.sla_breaches, a.escalations)} />
           </div>
 
           {/* Trend — full width */}
-          <ChartCard title="Audited actions over time" hint="All logged actions per day" className="mb-5">
+          <ChartCard title={t.chartTrend} hint={t.chartTrendHint} className="mb-5">
             {a.actions_per_day?.length ? (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={a.actions_per_day} margin={{ top: 8, right: 12, left: -18, bottom: 4 }}>
@@ -161,7 +165,7 @@ export default function Admin() {
 
           {/* Donut + department bar */}
           <div className="grid gap-5 lg:grid-cols-2 mb-5">
-            <ChartCard title="Case status mix" hint={`${totalCases} active case${totalCases === 1 ? '' : 's'}`}>
+            <ChartCard title={t.chartCaseMix} hint={t.chartCaseMixHint(totalCases)}>
               {caseStatus.length ? (
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <div className="relative shrink-0" style={{ width: 200, height: 200 }}>
@@ -186,7 +190,7 @@ export default function Admin() {
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                       <span className="text-3xl font-extrabold text-ink-950 tabular-nums">{totalCases}</span>
-                      <span className="text-[10px] uppercase tracking-widest text-ink-500">cases</span>
+                      <span className="text-[10px] uppercase tracking-widest text-ink-500">{t.casesUnit}</span>
                     </div>
                   </div>
                   {/* Legend = direct identity labels, never colour alone */}
@@ -206,7 +210,7 @@ export default function Admin() {
               ) : <Empty />}
             </ChartCard>
 
-            <ChartCard title="Cases by department" hint="Volume across departments">
+            <ChartCard title={t.chartByDept} hint={t.chartByDeptHint}>
               {byDept.length ? (
                 <ResponsiveContainer width="100%" height={Math.max(200, byDept.length * 42)}>
                   <BarChart data={byDept} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 4 }}>
@@ -225,7 +229,7 @@ export default function Admin() {
 
           {/* Audit activity + efficiency */}
           <div className="grid gap-5 lg:grid-cols-2 mb-5">
-            <ChartCard title="Audit activity by type" hint="Top logged action types">
+            <ChartCard title={t.chartByAction} hint={t.chartByActionHint}>
               {byAction.length ? (
                 <ResponsiveContainer width="100%" height={Math.max(200, byAction.length * 34)}>
                   <BarChart data={byAction} layout="vertical" margin={{ top: 4, right: 28, left: 8, bottom: 4 }}>
@@ -241,12 +245,12 @@ export default function Admin() {
               ) : <Empty />}
             </ChartCard>
 
-            <ChartCard title="Drafting time — before vs after copilot" hint={`${a.drafting_time_reduction_pct}% faster`}>
+            <ChartCard title={t.chartDrafting} hint={t.chartDraftingHint(a.drafting_time_reduction_pct)}>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart
                   data={[
-                    { name: 'Before', minutes: a.avg_drafting_time_before_min },
-                    { name: 'After', minutes: a.avg_drafting_time_after_min },
+                    { name: t.before, minutes: a.avg_drafting_time_before_min },
+                    { name: t.after, minutes: a.avg_drafting_time_after_min },
                   ]}
                   margin={{ top: 8, right: 8, left: -18, bottom: 4 }}
                 >
@@ -266,9 +270,9 @@ export default function Admin() {
 
           {/* Impact tiles */}
           <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Citizen wait — before" value={`${a.citizen_wait_before_days}d`} tone="warn" sub="Typical turnaround" />
-            <Stat label="Citizen wait — after" value={`${a.citizen_wait_after_days}d`} tone="good" sub="With the copilot" />
-            <Stat label="Drafting time saved" value={`${a.drafting_time_reduction_pct}%`} tone="good" sub={`${a.avg_drafting_time_before_min}m → ${a.avg_drafting_time_after_min}m`} />
+            <Stat label={t.statWaitBefore} value={`${a.citizen_wait_before_days}d`} tone="warn" sub={t.statWaitBeforeSub} />
+            <Stat label={t.statWaitAfter} value={`${a.citizen_wait_after_days}d`} tone="good" sub={t.statWaitAfterSub} />
+            <Stat label={t.statTimeSaved} value={`${a.drafting_time_reduction_pct}%`} tone="good" sub={t.statTimeSavedSub(a.avg_drafting_time_before_min, a.avg_drafting_time_after_min)} />
           </div>
         </>
       )}
@@ -289,9 +293,10 @@ function ChartCard({ title, hint, children, className = '' }) {
 }
 
 function Empty() {
+  const t = useT().admin
   return (
     <div className="h-[200px] flex items-center justify-center text-sm text-ink-400">
-      No data yet
+      {t.empty}
     </div>
   )
 }

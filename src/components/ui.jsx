@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../lib/i18n.js'
 
 // ---------------------------------------------------------------------------
 // Small presentational primitives shared across pages. The UI is monochrome;
@@ -24,8 +25,11 @@ const STATUS_STYLES = {
 }
 
 export function StatusBadge({ status, className = '' }) {
+  const t = useT()
   const style = STATUS_STYLES[status] || 'bg-ink-100 text-ink-700'
-  return <span className={`chip ${style} ${className}`}>{status}</span>
+  // `status` is the English key (drives styling); show its translated label.
+  const label = t.common.status[status] || status
+  return <span className={`chip ${style} ${className}`}>{label}</span>
 }
 
 export function PriorityDot({ priority }) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { useTemplates, useCases, useDraftDocument, useSaveDocument, useApproveDocument, useIssueDocument } from '../lib/queries.js'
+import { useT } from '../lib/i18n.js'
 import { SectionTitle, StatusBadge, Shield } from '../components/ui.jsx'
 
 // Map backend document status -> the StatusBadge vocabulary.
@@ -8,6 +9,8 @@ const STATUS_LABEL = { draft: 'Draft', approved: 'Approved', issued: 'Issued' }
 
 export default function Officer() {
   const { role, actor } = useApp()
+  const t = useT().officer
+  const tRole = useT().nav.roles
   const templatesQ = useTemplates()
   const casesQ = useCases()
 
@@ -80,7 +83,7 @@ export default function Officer() {
       // R3: a 409 means the state guard rejected it — surface, don't crash.
       setActionError(
         err.status === 409
-          ? `Blocked by the server (409): the document must be in the required state first.`
+          ? t.blocked409
           : err.message,
       )
     }
@@ -91,13 +94,13 @@ export default function Officer() {
   return (
     <div>
       <SectionTitle
-        eyebrow="Officer Copilot"
-        title="Draft compliant documents — approve before anything is issued"
-        subtitle="Generate a draft from a template + case, edit it, then move it through the enforced draft → approve → issue lifecycle. The server rejects any out-of-order action with a 409."
+        eyebrow={t.eyebrow}
+        title={t.title}
+        subtitle={t.subtitle}
         right={
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-ink-500">Signed in as</span>
-            <span className="chip bg-ink-950 text-white">{role} · {actor}</span>
+            <span className="text-ink-500">{t.signedInAs}</span>
+            <span className="chip bg-ink-950 text-white">{tRole[role]} · {actor}</span>
           </div>
         }
       />
@@ -106,7 +109,7 @@ export default function Officer() {
         {/* Draft builder */}
         <div className="space-y-4">
           <div className="card p-4">
-            <h3 className="font-bold text-ink-950 mb-3">1 · Pick a document template</h3>
+            <h3 className="font-bold text-ink-950 mb-3">{t.step1}</h3>
             {templatesQ.isLoading ? (
               <Skeleton rows={2} />
             ) : (
@@ -130,7 +133,7 @@ export default function Officer() {
           </div>
 
           <div className="card p-4">
-            <h3 className="font-bold text-ink-950 mb-3">2 · Attach a case</h3>
+            <h3 className="font-bold text-ink-950 mb-3">{t.step2}</h3>
             {casesQ.isLoading ? (
               <Skeleton rows={1} />
             ) : (
@@ -139,7 +142,7 @@ export default function Officer() {
                 onChange={(e) => setCaseId(e.target.value)}
                 className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
               >
-                <option value="">— Select a case —</option>
+                <option value="">{t.selectCase}</option>
                 {cases.map((c) => (
                   <option key={c.id} value={c.id}>
                     #{c.id} · {c.citizen_name} · {c.title}
@@ -148,7 +151,7 @@ export default function Officer() {
               </select>
             )}
             <p className="text-[11px] text-ink-500 mt-2">
-              Placeholders are filled from the case details on the server.
+              {t.placeholderNote}
             </p>
           </div>
 
@@ -157,17 +160,17 @@ export default function Officer() {
             disabled={!caseId || templateId == null || draftMut.isPending}
             className="btn-teal w-full h-12 text-base"
           >
-            <Shield className="h-5 w-5" /> {draftMut.isPending ? 'Drafting…' : 'Auto-draft with copilot'}
+            <Shield className="h-5 w-5" /> {draftMut.isPending ? t.drafting : t.autoDraft}
           </button>
           <p className="text-[11px] text-ink-500 text-center px-2">
-            The draft is created in <strong>draft</strong> status. It cannot be issued until it is approved.
+            {t.draftStatusNote(t.draftWord)}
           </p>
 
           {/* Session queue */}
           {docs.length > 0 && (
             <div className="card overflow-hidden">
               <div className="px-4 py-2.5 border-b border-ink-200">
-                <h3 className="font-bold text-ink-700 text-sm">This session's drafts</h3>
+                <h3 className="font-bold text-ink-700 text-sm">{t.sessionDrafts}</h3>
               </div>
               <div className="divide-y divide-ink-100">
                 {docs.map((d) => (
@@ -179,7 +182,7 @@ export default function Officer() {
                     }`}
                   >
                     <span className="text-sm font-semibold text-ink-950 truncate">
-                      Doc #{d.id} · case #{d.case_id}
+                      {t.docLabel(d.id, d.case_id)}
                     </span>
                     <StatusBadge status={STATUS_LABEL[d.status] || d.status} />
                   </button>
@@ -194,20 +197,20 @@ export default function Officer() {
           {!selected ? (
             <div className="card p-10 text-center text-sm text-ink-500 h-full flex flex-col items-center justify-center">
               <Shield className="h-10 w-10 text-ink-400 mb-3" />
-              Generate a draft on the left to review, edit and issue it here.
+              {t.emptyEditor}
             </div>
           ) : (
             <>
               <div className="card p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-widest text-ink-500">Document #{selected.id}</div>
-                    <h3 className="text-lg font-extrabold text-ink-950">Case #{selected.case_id} · Template #{selected.template_id}</h3>
+                    <div className="text-xs font-bold uppercase tracking-widest text-ink-500">{t.documentNum(selected.id)}</div>
+                    <h3 className="text-lg font-extrabold text-ink-950">{t.caseTemplate(selected.case_id, selected.template_id)}</h3>
                   </div>
                   <StatusPill status={selected.status} />
                 </div>
 
-                <label className="field-label">Document content (editable while in draft)</label>
+                <label className="field-label">{t.contentLabel}</label>
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
@@ -217,15 +220,15 @@ export default function Officer() {
                 />
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-[11px] text-ink-500">
-                    {selected.approved_by && <>Approved by <strong>{selected.approved_by}</strong> · </>}
-                    {selected.issued_at ? 'Issued' : selected.status === 'draft' ? 'Editable' : 'Locked'}
+                    {selected.approved_by && <>{t.approvedBy(selected.approved_by)}</>}
+                    {selected.issued_at ? t.stateIssued : selected.status === 'draft' ? t.stateEditable : t.stateLocked}
                   </span>
                   <button
                     onClick={save}
                     disabled={!dirty || selected.status !== 'draft' || saveMut.isPending}
                     className="btn-ghost"
                   >
-                    {saveMut.isPending ? 'Saving…' : 'Save edits'}
+                    {saveMut.isPending ? t.saving : t.save}
                   </button>
                 </div>
               </div>
@@ -240,7 +243,7 @@ export default function Officer() {
                     disabled={selected.status !== 'draft'}
                     className="h-4 w-4 rounded border-ink-300 text-accent-700 focus:ring-accent-600"
                   />
-                  <span className="text-sm font-semibold text-ink-950">I reviewed this draft</span>
+                  <span className="text-sm font-semibold text-ink-950">{t.reviewed}</span>
                 </label>
 
                 <div className="flex items-center gap-3 mt-3">
@@ -249,14 +252,14 @@ export default function Officer() {
                     disabled={status !== 'draft' || !reviewed || approveMut.isPending}
                     className="btn-primary flex-1"
                   >
-                    {approveMut.isPending ? 'Approving…' : 'Approve'}
+                    {approveMut.isPending ? t.approving : t.approve}
                   </button>
                   <button
                     onClick={() => runLifecycle(issueMut)}
                     disabled={status !== 'approved' || issueMut.isPending}
                     className="btn-teal flex-1"
                   >
-                    <CheckIcon /> {issueMut.isPending ? 'Issuing…' : 'Issue'}
+                    <CheckIcon /> {issueMut.isPending ? t.issuing : t.issue}
                   </button>
                 </div>
 
@@ -266,8 +269,7 @@ export default function Officer() {
                   </div>
                 )}
                 <p className="text-[11px] text-ink-500 mt-3">
-                  Approve unlocks only after you tick “I reviewed”. Issue unlocks only once the server
-                  confirms status <strong>approved</strong> — a premature issue returns a 409, shown above.
+                  {t.approveNote(t.approvedWord)}
                 </p>
               </div>
             </>
