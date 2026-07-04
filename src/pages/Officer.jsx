@@ -1,127 +1,103 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { TEMPLATES, getSource } from '../data/seed.js'
+import { useTemplates, useCases, useDraftDocument, useSaveDocument, useApproveDocument, useIssueDocument } from '../lib/queries.js'
 import { SectionTitle, StatusBadge, Shield } from '../components/ui.jsx'
 
-// Fill {{placeholders}} in a template body from a values object.
-function renderBody(body, values) {
-  return body.replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `⟨${k}⟩`)
-}
-
-// Auto-draft plausible field values for a template, seeded from a case if picked.
-function autoDraft(template, caseObj, officer) {
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('en-IN')
-  const applicant = caseObj?.citizen || 'Applicant Name'
-  const officerShort = officer.replace(/\s*\(.*\)$/, '')
-  const base = {
-    issueDate: dateStr,
-    applicantName: applicant,
-    officerName: officerShort,
-    department: caseObj?.department || template.department,
-    designation: 'Authorised Officer',
-  }
-  const rnd = Math.floor(1000 + Math.random() * 8999)
-  switch (template.id) {
-    case 'TPL-INC':
-      return {
-        ...base,
-        certNo: `INC/2026/0${rnd}`,
-        relation: 'S/o',
-        guardianName: 'Guardian Name',
-        address: 'H.No 00-00, Locality',
-        district: 'Hyderabad',
-        annualIncome: '1,65,000',
-        annualIncomeWords: 'One Lakh Sixty-Five Thousand',
-        fy: '2025-26',
-        thresholdResult: 'below',
-      }
-    case 'TPL-GRV':
-      return {
-        ...base,
-        grievanceRef: `GRV/2026/0${rnd}`,
-        filedDate: new Date(now.getTime() - 5 * 864e5).toLocaleDateString('en-IN'),
-        grievanceSubject: caseObj?.title || 'Delay in service delivery',
-        actionTaken: 'The matter has been reviewed and the pending service has been sanctioned; the concerned section has been directed to complete delivery within 3 working days.',
-      }
-    case 'TPL-RAT':
-      return {
-        ...base,
-        ref: `CS/RC/2026/${rnd}`,
-        category: 'Priority Household (PHH)',
-        entitlement: '5 kg foodgrains per person per month',
-        cardNo: `TS-RC-2201-00${rnd}`,
-        fpsName: `FPS #${rnd % 400}, Local Ward`,
-      }
-    default:
-      return {
-        ...base,
-        noticeNo: `NOT/2026/0${rnd}`,
-        address: 'H.No 00-00, Locality',
-        subject: caseObj?.title || 'Official intimation',
-        noticeBody: 'You are hereby informed regarding the subject matter noted above. Please treat this as an official communication from the department.',
-        responseDays: '15',
-      }
-  }
-}
+// Map backend document status -> the StatusBadge vocabulary.
+const STATUS_LABEL = { draft: 'Draft', approved: 'Approved', issued: 'Issued' }
 
 export default function Officer() {
-  const { documents, currentOfficer, addDocument, approveDocument, rejectDocument, cases, makeUid } = useApp()
-  const [templateId, setTemplateId] = useState(TEMPLATES[0].id)
+  const { role, actor } = useApp()
+  const templatesQ = useTemplates()
+  const casesQ = useCases()
+
+  const draftMut = useDraftDocument()
+  const saveMut = useSaveDocument()
+  const approveMut = useApproveDocument()
+  const issueMut = useIssueDocument()
+
+  const [templateId, setTemplateId] = useState(null)
   const [caseId, setCaseId] = useState('')
-  const [reviewing, setReviewing] = useState(null) // document being reviewed
-  const [changeNote, setChangeNote] = useState('')
-  const [justDrafted, setJustDrafted] = useState(null)
+  const [docs, setDocs] = useState([]) // documents drafted this session
+  const [selectedId, setSelectedId] = useState(null)
+  const [editContent, setEditContent] = useState('')
+  const [reviewed, setReviewed] = useState(false)
+  const [actionError, setActionError] = useState(null)
 
-  const template = TEMPLATES.find((t) => t.id === templateId)
-  const openCases = cases.filter((c) => c.status !== 'Resolved')
+  const templates = templatesQ.data ?? []
+  const cases = casesQ.data ?? []
+  const selected = docs.find((d) => d.id === selectedId) || null
+  const status = selected?.status ?? 'draft'
 
-  const pending = documents.filter((d) => d.status === 'Pending Approval')
-  const issued = documents.filter((d) => d.status === 'Issued')
-  const changes = documents.filter((d) => d.status === 'Changes Requested')
+  // Default the template selection once templates load.
+  useEffect(() => {
+    if (templateId == null && templates.length) setTemplateId(templates[0].id)
+  }, [templates, templateId])
 
-  function generate() {
-    const caseObj = cases.find((c) => c.id === caseId)
-    const values = autoDraft(template, caseObj, currentOfficer)
-    const doc = {
-      id: makeUid('DOC'),
-      templateId: template.id,
-      templateName: template.name,
-      caseId: caseObj?.id || null,
-      title: `${template.name} — ${values.applicantName}`,
-      status: 'Pending Approval',
-      department: template.department,
-      createdBy: currentOfficer,
-      createdAt: new Date().toISOString(),
-      sources: template.sources,
-      explain: `Auto-drafted from the “${template.name}” template${caseObj ? ` using data from ${caseObj.id}` : ''}. Placeholders filled per ${template.sources.map((s) => getSource(s)?.ref).join(' & ')}. Requires officer approval before issuance.`,
-      values,
+  // Reset the editor + review gate whenever the selected document changes.
+  useEffect(() => {
+    setEditContent(selected?.content ?? '')
+    setReviewed(false)
+    setActionError(null)
+  }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function upsertDoc(doc) {
+    setDocs((prev) => {
+      const exists = prev.some((d) => d.id === doc.id)
+      return exists ? prev.map((d) => (d.id === doc.id ? doc : d)) : [doc, ...prev]
+    })
+  }
+
+  async function generate() {
+    if (!caseId || templateId == null) return
+    setActionError(null)
+    try {
+      const doc = await draftMut.mutateAsync({ caseId: Number(caseId), templateId, actor })
+      upsertDoc(doc)
+      setSelectedId(doc.id)
+    } catch (err) {
+      setActionError(err.message)
     }
-    addDocument(doc)
-    setJustDrafted(doc.id)
-    setReviewing(doc)
   }
 
-  function onApprove() {
-    approveDocument(reviewing.id, currentOfficer)
-    setReviewing(null)
+  async function save() {
+    if (!selected) return
+    try {
+      const doc = await saveMut.mutateAsync({ id: selected.id, content: editContent })
+      upsertDoc(doc)
+    } catch (err) {
+      setActionError(err.message)
+    }
   }
-  function onRequestChanges() {
-    rejectDocument(reviewing.id, currentOfficer, changeNote.trim())
-    setReviewing(null)
-    setChangeNote('')
+
+  async function runLifecycle(mutation) {
+    if (!selected) return
+    setActionError(null)
+    try {
+      const doc = await mutation.mutateAsync({ id: selected.id, actor })
+      upsertDoc(doc)
+    } catch (err) {
+      // R3: a 409 means the state guard rejected it — surface, don't crash.
+      setActionError(
+        err.status === 409
+          ? `Blocked by the server (409): the document must be in the required state first.`
+          : err.message,
+      )
+    }
   }
+
+  const dirty = selected && editContent !== selected.content
 
   return (
     <div>
       <SectionTitle
         eyebrow="Officer Copilot"
         title="Draft compliant documents — approve before anything is issued"
-        subtitle="The copilot fills the template from case data and explains which rules it applied. Nothing reaches a citizen until a human reviews and approves it."
+        subtitle="Generate a draft from a template + case, edit it, then move it through the enforced draft → approve → issue lifecycle. The server rejects any out-of-order action with a 409."
         right={
           <div className="flex items-center gap-3 text-sm">
             <span className="text-ink-500">Signed in as</span>
-            <span className="chip bg-indigo-800 text-white">{currentOfficer}</span>
+            <span className="chip bg-indigo-800 text-white">{role} · {actor}</span>
           </div>
         }
       />
@@ -130,248 +106,192 @@ export default function Officer() {
         {/* Draft builder */}
         <div className="space-y-4">
           <div className="card p-4">
-            <h3 className="font-bold text-indigo-900 mb-3">1 · Pick a document type</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTemplateId(t.id)}
-                  className={`text-left rounded-lg border p-3 transition-all ${
-                    templateId === t.id
-                      ? 'border-indigo-600 bg-indigo-800/5 ring-1 ring-indigo-600'
-                      : 'border-ink-300 hover:border-indigo-600/50'
-                  }`}
-                >
-                  <div className="text-xl mb-1">{t.icon}</div>
-                  <div className="text-sm font-bold text-indigo-900 leading-tight">{t.name}</div>
-                  <div className="text-[11px] text-ink-500 mt-0.5">{t.department}</div>
-                </button>
-              ))}
-            </div>
+            <h3 className="font-bold text-indigo-900 mb-3">1 · Pick a document template</h3>
+            {templatesQ.isLoading ? (
+              <Skeleton rows={2} />
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {templates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => setTemplateId(tpl.id)}
+                    className={`text-left rounded-lg border p-3 transition-all ${
+                      templateId === tpl.id
+                        ? 'border-indigo-600 bg-indigo-800/5 ring-1 ring-indigo-600'
+                        : 'border-ink-300 hover:border-indigo-600/50'
+                    }`}
+                  >
+                    <div className="text-sm font-bold text-indigo-900 leading-tight">{tpl.name}</div>
+                    <div className="text-[11px] text-ink-500 mt-0.5 line-clamp-2">{tpl.description}</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="card p-4">
-            <h3 className="font-bold text-indigo-900 mb-3">2 · Attach a case (optional)</h3>
-            <select
-              value={caseId}
-              onChange={(e) => setCaseId(e.target.value)}
-              className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
-            >
-              <option value="">— No case (blank placeholders) —</option>
-              {openCases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.id} · {c.citizen} · {c.title}
-                </option>
-              ))}
-            </select>
-
-            {/* Rules that will be applied — explainability up front */}
-            <div className="mt-3 rounded-lg bg-teal-500/5 border border-teal-500/20 p-3">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-teal-700 flex items-center gap-1.5">
-                <Shield className="h-3.5 w-3.5" /> Rules this draft will cite
-              </div>
-              <ul className="mt-2 space-y-1.5">
-                {template.sources.map((s) => (
-                  <li key={s} className="text-xs text-ink-700">
-                    <span className="font-bold text-teal-700">{getSource(s)?.ref}</span> — {getSource(s)?.title}
-                  </li>
+            <h3 className="font-bold text-indigo-900 mb-3">2 · Attach a case</h3>
+            {casesQ.isLoading ? (
+              <Skeleton rows={1} />
+            ) : (
+              <select
+                value={caseId}
+                onChange={(e) => setCaseId(e.target.value)}
+                className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              >
+                <option value="">— Select a case —</option>
+                {cases.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.id} · {c.citizen_name} · {c.title}
+                  </option>
                 ))}
-              </ul>
-            </div>
+              </select>
+            )}
+            <p className="text-[11px] text-ink-500 mt-2">
+              Placeholders are filled from the case details on the server.
+            </p>
           </div>
 
-          <button onClick={generate} className="btn-teal w-full h-12 text-base">
-            <Shield className="h-5 w-5" /> Auto-draft with copilot
+          <button
+            onClick={generate}
+            disabled={!caseId || templateId == null || draftMut.isPending}
+            className="btn-teal w-full h-12 text-base"
+          >
+            <Shield className="h-5 w-5" /> {draftMut.isPending ? 'Drafting…' : 'Auto-draft with copilot'}
           </button>
           <p className="text-[11px] text-ink-500 text-center px-2">
-            The draft is created in “Pending Approval”. It is <strong>not issued</strong> until you approve it below.
+            The draft is created in <strong>draft</strong> status. It cannot be issued until it is approved.
           </p>
-        </div>
 
-        {/* Approval queues */}
-        <div className="space-y-5">
-          {/* Pending approval — the gate */}
-          <div className="card overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-pending-bg/60 border-b border-pending/20">
-              <h3 className="font-bold text-pending flex items-center gap-2">
-                <ClockIcon /> Pending approval — human gate
-              </h3>
-              <span className="chip bg-pending text-white">{pending.length}</span>
-            </div>
-            <div className="divide-y divide-ink-100">
-              {pending.length === 0 && (
-                <div className="p-6 text-center text-sm text-ink-500">
-                  No drafts awaiting approval. Generate one on the left.
-                </div>
-              )}
-              {pending.map((d) => (
-                <DocRow key={d.id} doc={d} highlight={d.id === justDrafted} onReview={() => setReviewing(d)} />
-              ))}
-            </div>
-          </div>
-
-          {/* Changes requested */}
-          {changes.length > 0 && (
+          {/* Session queue */}
+          {docs.length > 0 && (
             <div className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-ink-100">
-                <h3 className="font-bold text-ink-700 flex items-center gap-2">Changes requested <span className="chip bg-pending-bg text-pending">{changes.length}</span></h3>
+              <div className="px-4 py-2.5 border-b border-ink-100">
+                <h3 className="font-bold text-ink-700 text-sm">This session's drafts</h3>
               </div>
               <div className="divide-y divide-ink-100">
-                {changes.map((d) => (
-                  <div key={d.id} className="p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-indigo-900 text-sm">{d.title}</div>
-                      <StatusBadge status="Changes Requested" />
-                    </div>
-                    {d.reviewNote && <p className="text-xs text-ink-500 mt-1">Note: “{d.reviewNote}”</p>}
-                  </div>
+                {docs.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setSelectedId(d.id)}
+                    className={`w-full text-left p-3 flex items-center justify-between gap-2 transition-colors ${
+                      selectedId === d.id ? 'bg-teal-500/5' : 'hover:bg-ink-100/50'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold text-indigo-900 truncate">
+                      Doc #{d.id} · case #{d.case_id}
+                    </span>
+                    <StatusBadge status={STATUS_LABEL[d.status] || d.status} />
+                  </button>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Issued */}
-          <div className="card overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-approved-bg/50 border-b border-approved/20">
-              <h3 className="font-bold text-approved flex items-center gap-2">
-                <CheckIcon /> Issued documents
-              </h3>
-              <span className="chip bg-approved text-white">{issued.length}</span>
-            </div>
-            <div className="divide-y divide-ink-100">
-              {issued.map((d) => (
-                <div key={d.id} className="p-4 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-indigo-900 text-sm truncate">{d.title}</div>
-                    <div className="text-[11px] text-ink-500 mt-0.5">
-                      Approved by {d.approvedBy || d.createdBy} · {d.templateName}
-                    </div>
-                  </div>
-                  <StatusBadge status="Issued" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Review drawer */}
-      {reviewing && (
-        <ReviewDrawer
-          doc={reviewing}
-          template={TEMPLATES.find((t) => t.id === reviewing.templateId)}
-          changeNote={changeNote}
-          setChangeNote={setChangeNote}
-          onClose={() => setReviewing(null)}
-          onApprove={onApprove}
-          onRequestChanges={onRequestChanges}
-          canAct={reviewing.status === 'Pending Approval'}
-        />
-      )}
-    </div>
-  )
-}
-
-function DocRow({ doc, onReview, highlight }) {
-  return (
-    <div className={`p-4 flex items-center justify-between gap-3 ${highlight ? 'bg-teal-500/5 animate-slideIn' : ''}`}>
-      <div className="min-w-0">
-        <div className="font-semibold text-indigo-900 text-sm truncate">{doc.title}</div>
-        <div className="text-[11px] text-ink-500 mt-0.5">
-          {doc.templateName} · drafted by {doc.createdBy}
-        </div>
-      </div>
-      <button onClick={onReview} className="btn-primary shrink-0">
-        Review →
-      </button>
-    </div>
-  )
-}
-
-function ReviewDrawer({ doc, template, onClose, onApprove, onRequestChanges, changeNote, setChangeNote, canAct }) {
-  const body = renderBody(template.body, doc.values)
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-indigo-950/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl h-full bg-white shadow-panel flex flex-col animate-slideIn">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-ink-100">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-teal-600">Review draft</div>
-            <h3 className="text-lg font-extrabold text-indigo-900">{doc.title}</h3>
-          </div>
-          <button onClick={onClose} className="btn-ghost h-9 w-9 p-0 rounded-full">✕</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto scroll-slim p-5 space-y-4">
-          {/* Explainability */}
-          <div className="rounded-lg bg-indigo-800/5 border border-indigo-600/20 p-4">
-            <div className="text-xs font-bold uppercase tracking-wide text-indigo-700 flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5" /> What the copilot generated & why
-            </div>
-            <p className="text-sm text-ink-700 mt-2 leading-relaxed">{doc.explain}</p>
-            {/* Explicit "Rules applied" line — ties every draft to its source SOP. */}
-            <div className="mt-3 rounded-md bg-white/70 border border-teal-500/20 px-3 py-2">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-teal-700">Rules applied</span>
-              <ul className="mt-1 space-y-0.5">
-                {doc.sources.map((s) => (
-                  <li key={s} className="text-xs text-ink-700">
-                    <span className="font-semibold text-teal-700">{getSource(s)?.ref}</span> — {getSource(s)?.title}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Rendered document */}
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-2">Generated document</div>
-            <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-ink-900 bg-ink-100/60 border border-ink-300 rounded-lg p-4">
-{body}
-            </pre>
-          </div>
-
-          {canAct && (
-            <div>
-              <label className="field-label">Note (required only if requesting changes)</label>
-              <textarea
-                rows={2}
-                value={changeNote}
-                onChange={(e) => setChangeNote(e.target.value)}
-                placeholder="e.g. Correct the guardian name and re-verify income slab."
-                className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Action bar — the gate */}
-        <div className="border-t border-ink-100 p-4">
-          {canAct ? (
-            <div className="flex items-center gap-3">
-              <button onClick={onRequestChanges} className="btn-ghost flex-1">Request changes</button>
-              <button onClick={onApprove} className="btn-teal flex-1">
-                <CheckIcon /> Approve & issue
-              </button>
+        {/* Editor + approval bar */}
+        <div className="space-y-4">
+          {!selected ? (
+            <div className="card p-10 text-center text-sm text-ink-500 h-full flex flex-col items-center justify-center">
+              <Shield className="h-10 w-10 text-ink-300 mb-3" />
+              Generate a draft on the left to review, edit and issue it here.
             </div>
           ) : (
-            <div className="text-center text-sm text-ink-500">This document has already been actioned.</div>
+            <>
+              <div className="card p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-widest text-teal-600">Document #{selected.id}</div>
+                    <h3 className="text-lg font-extrabold text-indigo-900">Case #{selected.case_id} · Template #{selected.template_id}</h3>
+                  </div>
+                  <StatusPill status={selected.status} />
+                </div>
+
+                <label className="field-label">Document content (editable while in draft)</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  disabled={selected.status !== 'draft'}
+                  rows={16}
+                  className="w-full rounded-lg border border-ink-300 px-3.5 py-3 font-mono text-[13px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:bg-ink-100/60 disabled:text-ink-500"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[11px] text-ink-500">
+                    {selected.approved_by && <>Approved by <strong>{selected.approved_by}</strong> · </>}
+                    {selected.issued_at ? 'Issued' : selected.status === 'draft' ? 'Editable' : 'Locked'}
+                  </span>
+                  <button
+                    onClick={save}
+                    disabled={!dirty || selected.status !== 'draft' || saveMut.isPending}
+                    className="btn-ghost"
+                  >
+                    {saveMut.isPending ? 'Saving…' : 'Save edits'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Approval bar — R3 gate */}
+              <div className="card p-4">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={reviewed}
+                    onChange={(e) => setReviewed(e.target.checked)}
+                    disabled={selected.status !== 'draft'}
+                    className="h-4 w-4 rounded border-ink-300 text-indigo-700 focus:ring-indigo-600"
+                  />
+                  <span className="text-sm font-semibold text-indigo-900">I reviewed this draft</span>
+                </label>
+
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={() => runLifecycle(approveMut)}
+                    disabled={status !== 'draft' || !reviewed || approveMut.isPending}
+                    className="btn-primary flex-1"
+                  >
+                    {approveMut.isPending ? 'Approving…' : 'Approve'}
+                  </button>
+                  <button
+                    onClick={() => runLifecycle(issueMut)}
+                    disabled={status !== 'approved' || issueMut.isPending}
+                    className="btn-teal flex-1"
+                  >
+                    <CheckIcon /> {issueMut.isPending ? 'Issuing…' : 'Issue'}
+                  </button>
+                </div>
+
+                {actionError && (
+                  <div className="mt-3 rounded-lg bg-breach-bg/60 border border-breach/30 px-3 py-2 text-xs text-breach">
+                    {actionError}
+                  </div>
+                )}
+                <p className="text-[11px] text-ink-500 mt-3">
+                  Approve unlocks only after you tick “I reviewed”. Issue unlocks only once the server
+                  confirms status <strong>approved</strong> — a premature issue returns a 409, shown above.
+                </p>
+              </div>
+            </>
           )}
-          <p className="text-[11px] text-ink-500 text-center mt-2">
-            Approving writes an immutable audit entry citing {doc.sources.map((s) => getSource(s)?.ref).join(', ')}.
-          </p>
         </div>
       </div>
     </div>
   )
 }
 
-function ClockIcon() {
+function StatusPill({ status }) {
+  return <StatusBadge status={STATUS_LABEL[status] || status} />
+}
+
+function Skeleton({ rows = 2 }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="h-10 rounded-lg bg-ink-100 animate-pulse" />
+      ))}
+    </div>
   )
 }
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5">

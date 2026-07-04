@@ -1,12 +1,13 @@
 // ---------------------------------------------------------------------------
-// Thin fetch layer over the backend (Section A contracts). Base URL comes from
-// VITE_API_URL and falls back to the local backend. Every non-2xx response
-// throws — including an expected 409 from approve/issue — so TanStack Query
-// surfaces it to the caller (R3). We attach `.status` for callers that want to
-// branch on it (e.g. show the 409 inline instead of a generic toast).
+// GovAssist AI backend client. BASE already includes `/api`
+// (e.g. https://mrdu.avlokai.com/api). Override with VITE_API_URL.
+//
+// Every non-2xx throws an ApiError carrying `.status`, so callers can branch on
+// an expected 409 (draft→approve→issue guard, advance-past-final) and surface it
+// inline instead of crashing.
 // ---------------------------------------------------------------------------
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const BASE = import.meta.env.VITE_API_URL ?? 'https://mrdu.avlokai.com/api'
 
 export class ApiError extends Error {
   constructor(status, body) {
@@ -25,42 +26,48 @@ async function req(path, init) {
       ...init,
     })
   } catch (networkErr) {
-    // Backend not running / CORS / DNS — give a readable message.
-    throw new ApiError(0, `Cannot reach backend at ${BASE}. Is it running? (${networkErr.message})`)
+    throw new ApiError(0, `Cannot reach the backend at ${BASE}. (${networkErr.message})`)
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new ApiError(res.status, body) // surfaces 409 etc. to Query
+    throw new ApiError(res.status, body || res.statusText)
   }
-  // Some endpoints may 204; guard against empty bodies.
   const text = await res.text()
   return text ? JSON.parse(text) : null
 }
 
-export const get = (path) => req(path)
-export const post = (path, body) => req(path, { method: 'POST', body: JSON.stringify(body) })
-export const put = (path, body) => req(path, { method: 'PUT', body: JSON.stringify(body) })
+const get = (path) => req(path)
+const post = (path, body) => req(path, { method: 'POST', body: JSON.stringify(body) })
+const put = (path, body) => req(path, { method: 'PUT', body: JSON.stringify(body) })
 
-// ---- Typed-ish endpoint helpers (Section A) ------------------------------
+export const API_BASE = BASE
 
 export const api = {
-  base: BASE,
+  // Chat & RAG
+  chat: (query, actor) => post('/chat', { query, actor }),
+  classify: (query, actor) => post('/classify', { query, actor }),
+  translate: (text, target) => post('/translate', { text, target }),
 
-  chat: (query, actor) => post('/api/chat', { query, actor }),
+  // Cases + workflow
+  getCases: () => get('/cases'),
+  getCase: (id) => get(`/cases/${id}`),
+  createCase: (body) => post('/cases', body),
+  advanceCase: (id, actor) => post(`/cases/${id}/advance`, { actor }),
+  escalateCase: (id, actor, reason) => post(`/cases/${id}/escalate`, { actor, reason }),
+  getWorkflows: () => get('/workflows'),
 
-  getCases: () => get('/api/cases'),
-  createCase: (body) => post('/api/cases', body),
+  // Documents lifecycle: draft → approve → issue
+  getTemplates: () => get('/templates'),
+  draftDocument: (case_id, template_id, actor) => post('/documents/draft', { case_id, template_id, actor }),
+  saveDocument: (id, content) => put(`/documents/${id}`, { content }),
+  approveDocument: (id, actor) => post(`/documents/${id}/approve`, { actor }),
+  issueDocument: (id, actor) => post(`/documents/${id}/issue`, { actor }),
 
-  getTemplates: () => get('/api/templates'),
+  // Schemes
+  getSchemes: () => get('/schemes'),
+  checkEligibility: (scheme_id, fields, actor) => post('/schemes/eligibility', { scheme_id, fields, actor }),
 
-  draftDocument: (case_id, template_id, actor) =>
-    post('/api/documents/draft', { case_id, template_id, actor }),
-  saveDocument: (id, content) => put(`/api/documents/${id}`, { content }),
-  approveDocument: (id, actor) => post(`/api/documents/${id}/approve`, { actor }),
-  issueDocument: (id, actor) => post(`/api/documents/${id}/issue`, { actor }),
-
-  getAudit: () => get('/api/audit'),
-  getAnalytics: () => get('/api/analytics/summary'),
-
-  translate: (text, target) => post('/api/translate', { text, target }),
+  // Audit + analytics
+  getAudit: () => get('/audit'),
+  getAnalytics: () => get('/analytics/summary'),
 }

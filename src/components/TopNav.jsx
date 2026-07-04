@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useApp } from '../store/AppContext.jsx'
+import { useAudit } from '../lib/queries.js'
 import { Shield } from './ui.jsx'
 
 // Which modules each role may see. This is the visible half of RBAC —
@@ -21,7 +22,9 @@ const NAV = [
 const ROLES = ['Citizen', 'Officer', 'Supervisor']
 
 export default function TopNav() {
-  const { role, setRole, audit } = useApp()
+  const { role, setRole } = useApp()
+  const auditQ = useAudit()
+  const auditCount = auditQ.data?.length ?? 0
   const allowed = ROLE_ROUTES[role]
   const links = NAV.filter((n) => allowed.includes(n.to))
 
@@ -61,7 +64,7 @@ export default function TopNav() {
             {/* Live audit counter — reinforces "every action is logged" */}
             <div className="hidden lg:flex items-center gap-1.5 text-xs text-teal-200">
               <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulseDot" />
-              {audit.length} audited actions
+              {auditCount} audited actions
             </div>
 
             {/* Trust badge — nothing is issued without a human approval */}

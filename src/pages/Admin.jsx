@@ -1,66 +1,34 @@
-import { useMemo } from 'react'
 import {
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { useApp, useAnalytics } from '../store/AppContext.jsx'
+import { useApp } from '../store/AppContext.jsx'
+import { useAnalytics } from '../lib/queries.js'
 import { ROLE_ROUTES } from '../components/TopNav.jsx'
 import { SectionTitle, Stat } from '../components/ui.jsx'
 
 const ROLES = [
   { id: 'Citizen', desc: 'Sees only the citizen Assistant.', icon: '👤' },
   { id: 'Officer', desc: 'Assistant, Copilot, Workflow, Audit.', icon: '🧑‍💼' },
-  { id: 'Supervisor', desc: 'Full access including Admin analytics.', icon: '🛡️' },
+  { id: 'Supervisor', desc: 'Full access including Analytics.', icon: '🛡️' },
 ]
-
-const STATUS_COLORS = {
-  'In Progress': '#b45309',
-  'Pending Approval': '#d97706',
-  Breached: '#b91c1c',
-  Resolved: '#15803d',
-}
 
 const CHART_INDIGO = '#3b2b96'
 const CHART_TEAL = '#0d8b84'
 
 export default function Admin() {
-  const { role, setRole, cases, documents } = useApp()
-  const a = useAnalytics()
-
-  const statusData = useMemo(
-    () => Object.entries(a.byStatus).map(([name, value]) => ({ name, value })),
-    [a.byStatus],
-  )
-
-  const deptData = useMemo(() => {
-    const m = {}
-    for (const c of cases) m[c.department] = (m[c.department] || 0) + 1
-    return Object.entries(m).map(([name, cases]) => ({ name: name.replace(' Administration', ' Admin'), cases }))
-  }, [cases])
-
-  const citationData = [
-    { name: 'Verified citations', value: a.answered, color: CHART_TEAL },
-    { name: 'Flagged unverified', value: a.flagged, color: '#b91c1c' },
-  ]
-
-  // Illustrative resolution-time trend (weeks).
-  const trendData = [
-    { week: 'W1', days: 8.9 },
-    { week: 'W2', days: 7.8 },
-    { week: 'W3', days: 7.1 },
-    { week: 'W4', days: 6.7 },
-    { week: 'W5', days: a.avgResolutionDays },
-  ]
+  const { role, setRole } = useApp()
+  const analyticsQ = useAnalytics()
+  const a = analyticsQ.data
 
   return (
     <div>
       <SectionTitle
-        eyebrow="Admin · Role-Based Access & Analytics"
-        title="Access control and program health"
-        subtitle="Toggle a role to gate which modules are visible across the app. Analytics update live as answers are given, drafts approved, and SLAs breach."
+        eyebrow="Analytics · Role-Based Access & Program Health"
+        title="Access control and live analytics"
+        subtitle="Toggle a role to gate which modules are visible across the app. All figures are read live from the GovAssist backend."
       />
 
-      {/* Role toggle */}
+      {/* Role toggle (visible RBAC) */}
       <div className="card p-4 mb-6">
         <h3 className="font-bold text-indigo-900 mb-3">Active role (RBAC)</h3>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -91,69 +59,64 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
-        <Stat label="Total cases" value={a.total} sub={`${a.resolved} resolved`} />
-        <Stat label="SLA breach rate" value={`${a.breachRate}%`} tone={a.breachRate > 20 ? 'bad' : 'warn'} sub={`${a.breached} breached`} />
-        <Stat label="Verified answers" value={`${a.verifiedPct}%`} tone={a.flaggedPct > 0 ? 'warn' : 'good'} sub={`${a.flagged} flagged unverified`} />
-        <Stat label="Docs human-approved" value="100%" tone="good" sub={`${a.issued} issued · 0 auto-issued`} />
-        <Stat label="Officer hours saved" value={`${a.officerHoursSaved.toFixed(0)}h`} tone="good" sub={`${documents.length} docs drafted`} />
-      </div>
+      {analyticsQ.isLoading && <div className="card p-10 text-center text-sm text-ink-500">Loading analytics…</div>}
+      {analyticsQ.isError && <div className="card p-6 text-sm text-breach">Could not load analytics: {analyticsQ.error.message}</div>}
 
-      {/* Charts */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <ChartCard title="Cases by status" hint="Live from the workflow board">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2}>
-                {statusData.map((d) => (
-                  <Cell key={d.name} fill={STATUS_COLORS[d.name] || '#6b7280'} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      {a && (
+        <>
+          {/* KPI strip */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
+            <Stat label="Total chats" value={a.total_chats} sub="Grounded Q&A" />
+            <Stat label="Drafts generated" value={a.total_drafts} sub={`${a.total_issued} issued`} />
+            <Stat label="Avg citations / answer" value={a.avg_citations} tone="good" sub="≥1 guaranteed (R2)" />
+            <Stat label="Docs human-approved" value="100%" tone="good" sub={`${a.total_issued} issued · 0 auto-issued`} />
+            <Stat label="Open cases" value={a.open_cases} tone="warn" sub={`${a.sla_breaches} SLA breaches · ${a.escalations} escalated`} />
+          </div>
 
-        <ChartCard title="AI answers: verified vs flagged" hint="Citation grounding rate">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={citationData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                {citationData.map((d) => (
-                  <Cell key={d.name} fill={d.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
+          {/* Charts */}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <ChartCard title="Actions per day" hint="All audited actions">
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={a.actions_per_day} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill={CHART_INDIGO} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-        <ChartCard title="Cases by department" hint="Rule-based routing distribution">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={deptData} margin={{ top: 8, right: 8, left: -18, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-              <XAxis dataKey="name" angle={-25} textAnchor="end" interval={0} tick={{ fontSize: 11 }} height={50} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="cases" fill={CHART_INDIGO} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+            <ChartCard title="Drafting time — before vs after copilot" hint={`${a.drafting_time_reduction_pct}% faster`}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart
+                  data={[
+                    { name: 'Before', minutes: a.avg_drafting_time_before_min },
+                    { name: 'After', minutes: a.avg_drafting_time_after_min },
+                  ]}
+                  margin={{ top: 8, right: 8, left: -18, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} unit="m" />
+                  <Tooltip />
+                  <Bar dataKey="minutes" radius={[4, 4, 0, 0]}>
+                    <Cell fill="#b45309" />
+                    <Cell fill={CHART_TEAL} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
 
-        <ChartCard title="Avg resolution time (days)" hint="Trending down with copilot assist">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={trendData} margin={{ top: 8, right: 12, left: -18, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-              <YAxis domain={[5, 10]} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="days" stroke={CHART_TEAL} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
+          {/* Impact tiles */}
+          <div className="grid gap-4 sm:grid-cols-3 mt-5">
+            <Stat label="Citizen wait — before" value={`${a.citizen_wait_before_days}d`} tone="warn" sub="Typical turnaround" />
+            <Stat label="Citizen wait — after" value={`${a.citizen_wait_after_days}d`} tone="good" sub="With the copilot" />
+            <Stat label="Drafting time saved" value={`${a.drafting_time_reduction_pct}%`} tone="good" sub={`${a.avg_drafting_time_before_min}m → ${a.avg_drafting_time_after_min}m`} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

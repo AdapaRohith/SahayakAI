@@ -1,160 +1,212 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { routeDepartment } from '../data/seed.js'
-import { SectionTitle, StatusBadge, PriorityDot, Stat } from '../components/ui.jsx'
-import { slaCountdown, fmtDate } from '../lib/utils.js'
+import { api } from '../api.js'
+import { useCases, useCreateCase, useAdvanceCase, useEscalateCase } from '../lib/queries.js'
+import { SectionTitle, StatusBadge, Stat, Shield } from '../components/ui.jsx'
+import { fmtDate } from '../lib/utils.js'
 
+// Kanban columns derived from backend case status + escalation flag.
 const COLUMNS = [
-  { key: 'In Progress', tone: 'pending' },
-  { key: 'Pending Approval', tone: 'pending' },
-  { key: 'Breached', tone: 'breach' },
-  { key: 'Resolved', tone: 'approved' },
+  { key: 'open', label: 'Open', tone: 'pending', match: (c) => c.status === 'open' && !c.escalated },
+  { key: 'drafting', label: 'In progress', tone: 'pending', match: (c) => c.status === 'drafting' && !c.escalated },
+  { key: 'escalated', label: 'Escalated', tone: 'breach', match: (c) => c.escalated },
+  { key: 'issued', label: 'Issued', tone: 'approved', match: (c) => c.status === 'issued' },
 ]
 
-export default function Workflow() {
-  const { cases, escalateCase, addCase, resolveCase, makeUid, role } = useApp()
-  const [now, setNow] = useState(Date.now())
-  const [draftTitle, setDraftTitle] = useState('')
-  const [draftCitizen, setDraftCitizen] = useState('')
+const SLA_COLOR = { green: 'text-approved', amber: 'text-pending', red: 'text-breach', done: 'text-ink-500' }
 
-  // Live clock — drives the countdown timers.
+function fmtDuration(ms) {
+  const abs = Math.abs(ms)
+  const h = Math.floor(abs / 3_600_000)
+  const m = Math.floor((abs % 3_600_000) / 60_000)
+  const s = Math.floor((abs % 60_000) / 1000)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(h)}:${pad(m)}:${pad(s)}`
+}
+
+export default function Workflow() {
+  const { actor, role } = useApp()
+  const casesQ = useCases()
+  const createMut = useCreateCase()
+  const advanceMut = useAdvanceCase()
+  const escalateMut = useEscalateCase()
+
+  const [now, setNow] = useState(Date.now())
+  const [title, setTitle] = useState('')
+  const [citizen, setCitizen] = useState('')
+  const [preview, setPreview] = useState(null)
+  const [formError, setFormError] = useState(null)
+
+  // Live clock for the SLA countdowns.
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
 
-  // Auto-escalation: any open case whose deadline has passed is escalated once.
-  useEffect(() => {
-    for (const c of cases) {
-      const past = new Date(c.slaDeadline).getTime() <= now
-      if (past && !c.escalated && ['In Progress', 'Pending Approval'].includes(c.status)) {
-        escalateCase(c.id)
-      }
-    }
-  }, [now, cases, escalateCase])
-
-  const predictedDept = draftTitle.trim() ? routeDepartment(draftTitle) : null
-
-  function fileCase(e) {
-    e.preventDefault()
-    if (!draftTitle.trim()) return
-    const dept = routeDepartment(draftTitle)
-    const slaHours = 72
-    const created = new Date().toISOString()
-    const c = {
-      id: makeUid('CASE'),
-      title: draftTitle.trim(),
-      citizen: draftCitizen.trim() || 'Anonymous Citizen',
-      summary: draftTitle.trim(),
-      status: 'In Progress',
-      priority: 'Normal',
-      department: dept,
-      createdAt: created,
-      slaHours,
-      slaDeadline: new Date(Date.now() + slaHours * 3_600_000).toISOString(),
-      escalated: false,
-      escalationTier: null,
-      routeText: draftTitle.trim(),
-    }
-    addCase(c)
-    setDraftTitle('')
-    setDraftCitizen('')
-  }
+  const cases = casesQ.data ?? []
+  const fetchedAt = casesQ.dataUpdatedAt || Date.now()
 
   const stats = useMemo(() => {
-    const open = cases.filter((c) => ['In Progress', 'Pending Approval'].includes(c.status)).length
-    const breached = cases.filter((c) => c.status === 'Breached').length
+    const open = cases.filter((c) => c.status === 'open' || c.status === 'drafting').length
+    const breached = cases.filter((c) => c.sla_status === 'red').length
     const escalated = cases.filter((c) => c.escalated).length
     return { open, breached, escalated }
   }, [cases])
+
+  async function classify() {
+    if (!title.trim()) return
+    try {
+      const res = await api.classify(title.trim(), actor)
+      setPreview(res)
+    } catch {
+      setPreview(null)
+    }
+  }
+
+  async function fileCase(e) {
+    e.preventDefault()
+    setFormError(null)
+    if (!title.trim() || !citizen.trim()) {
+      setFormError('Title and citizen name are required.')
+      return
+    }
+    try {
+      await createMut.mutateAsync({
+        title: title.trim(),
+        citizen_name: citizen.trim(),
+        details: { note: title.trim() },
+      })
+      setTitle('')
+      setCitizen('')
+      setPreview(null)
+    } catch (err) {
+      setFormError(err.message)
+    }
+  }
 
   return (
     <div>
       <SectionTitle
         eyebrow="Workflow & SLA"
         title="Case routing with live SLA countdowns"
-        subtitle="Cases are auto-routed to a department by rule. When an SLA timer expires the case turns red, auto-escalates to the supervisor tier, and the escalation is logged to the audit trail."
+        subtitle="Cases move through a per-workflow state machine (Revenue Inspector → Tahsildar → Issued, etc.). SLA timers tick live; advance a case to the next stage or escalate it for supervisor attention."
       />
 
       <div className="grid gap-4 sm:grid-cols-3 mb-5">
-        <Stat label="Open cases" value={stats.open} tone="warn" sub="In progress / pending" />
-        <Stat label="SLA breached" value={stats.breached} tone="bad" sub="Past deadline" />
+        <Stat label="Open cases" value={stats.open} tone="warn" sub="Open / in progress" />
+        <Stat label="SLA breached" value={stats.breached} tone="bad" sub="Past deadline (red)" />
         <Stat label="Escalated" value={stats.escalated} tone="bad" sub="Raised to supervisor" />
       </div>
 
-      {/* File a new case — demonstrates live auto-routing */}
+      {/* File a new case — backend auto-classifies the workflow */}
       <form onSubmit={fileCase} className="card p-4 mb-6">
         <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] items-end">
           <div>
             <label className="field-label">New case — describe the request</label>
             <input
-              value={draftTitle}
-              onChange={(e) => setDraftTitle(e.target.value)}
-              placeholder="e.g. Delay in water connection / income certificate / ration card issue"
+              value={title}
+              onChange={(e) => { setTitle(e.target.value); setPreview(null) }}
+              placeholder="e.g. Transfer my father's land to my name / income certificate for PM-KISAN"
               className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
             />
           </div>
           <div>
             <label className="field-label">Citizen name</label>
             <input
-              value={draftCitizen}
-              onChange={(e) => setDraftCitizen(e.target.value)}
-              placeholder="Optional"
+              value={citizen}
+              onChange={(e) => setCitizen(e.target.value)}
+              placeholder="Required"
               className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
             />
           </div>
-          <button type="submit" className="btn-primary h-[38px]">Route & file</button>
+          <div className="flex gap-2">
+            <button type="button" onClick={classify} className="btn-ghost h-[38px]">Preview route</button>
+            <button type="submit" disabled={createMut.isPending} className="btn-primary h-[38px]">
+              {createMut.isPending ? 'Filing…' : 'File case'}
+            </button>
+          </div>
         </div>
-        {predictedDept && (
-          <div className="mt-2 text-xs text-ink-500">
-            Auto-routes to{' '}
-            <span className="chip bg-teal-500/15 text-teal-700">{predictedDept}</span>{' '}
-            <span className="text-ink-300">·</span> rule-based routing, logged on file
+        {preview && (
+          <div className="mt-3 rounded-lg bg-teal-500/5 border border-teal-500/20 p-3 text-xs">
+            <span className="font-semibold text-teal-700">Classified as {preview.case_type}</span>
+            <span className="text-ink-500"> · {preview.department} · confidence {(preview.confidence * 100).toFixed(0)}%</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {preview.route?.map((r, i) => (
+                <span key={i} className="chip bg-indigo-800/10 text-indigo-800">
+                  {r.stage} · {r.sla_hours}h
+                </span>
+              ))}
+            </div>
           </div>
         )}
+        {formError && <div className="mt-2 text-xs text-breach">{formError}</div>}
       </form>
 
       {/* Board */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {COLUMNS.map((col) => {
-          const items = cases.filter((c) => c.status === col.key)
-          return (
-            <div key={col.key} className="flex flex-col">
-              <div className="flex items-center justify-between mb-2 px-1">
-                <h3 className="font-bold text-sm text-indigo-900">{col.key}</h3>
-                <span className={`chip ${
-                  col.tone === 'breach' ? 'bg-breach-bg text-breach'
-                  : col.tone === 'approved' ? 'bg-approved-bg text-approved'
-                  : 'bg-pending-bg text-pending'
-                }`}>{items.length}</span>
+      {casesQ.isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {COLUMNS.map((c) => <div key={c.key} className="h-40 rounded-xl bg-ink-100 animate-pulse" />)}
+        </div>
+      ) : casesQ.isError ? (
+        <div className="card p-6 text-sm text-breach">Could not load cases: {casesQ.error.message}</div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {COLUMNS.map((col) => {
+            const items = cases.filter(col.match)
+            return (
+              <div key={col.key} className="flex flex-col">
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <h3 className="font-bold text-sm text-indigo-900">{col.label}</h3>
+                  <span className={`chip ${
+                    col.tone === 'breach' ? 'bg-breach-bg text-breach'
+                    : col.tone === 'approved' ? 'bg-approved-bg text-approved'
+                    : 'bg-pending-bg text-pending'
+                  }`}>{items.length}</span>
+                </div>
+                <div className="space-y-3">
+                  {items.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-ink-300 p-4 text-center text-xs text-ink-500">
+                      No cases
+                    </div>
+                  )}
+                  {items.map((c) => (
+                    <CaseCard
+                      key={c.id}
+                      c={c}
+                      now={now}
+                      fetchedAt={fetchedAt}
+                      supervisor={role === 'Supervisor'}
+                      onAdvance={() => advanceMut.mutate({ id: c.id, actor })}
+                      onEscalate={() => escalateMut.mutate({ id: c.id, actor, reason: 'Flagged for supervisor attention' })}
+                      advancing={advanceMut.isPending}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="space-y-3">
-                {items.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-ink-300 p-4 text-center text-xs text-ink-500">
-                    No cases
-                  </div>
-                )}
-                {items.map((c) => (
-                  <CaseCard key={c.id} c={c} now={now} onResolve={() => resolveCase(c.id)} supervisor={role === 'Supervisor'} />
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
-function CaseCard({ c, now, onResolve, supervisor }) {
-  const sla = slaCountdown(c.slaDeadline, now)
-  const isOpen = ['In Progress', 'Pending Approval'].includes(c.status)
-  const timerColor = sla.breached ? 'text-breach' : sla.urgent ? 'text-pending' : 'text-approved'
-  // Supervisors get a stronger visual on escalated cases (Change 3).
+function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
+  // sla_remaining_hours was accurate at fetch time; project it forward so the
+  // timer ticks live between refetches.
+  const deadlineMs = fetchedAt + c.sla_remaining_hours * 3_600_000
+  const remaining = deadlineMs - now
+  const done = c.sla_status === 'done' || c.status === 'issued'
+  const overdue = !done && remaining <= 0
+  const timerColor = done ? 'text-ink-500' : SLA_COLOR[c.sla_status] || 'text-approved'
+
   const supervisorFlag = supervisor && c.escalated
-  const cardBorder = c.status === 'Breached'
+  const cardBorder = c.escalated
     ? `border-breach/40 ring-1 ring-breach/20${supervisorFlag ? ' ring-2 ring-breach/50 shadow-panel' : ''}`
     : 'border-ink-100'
+
+  const routeLen = c.route?.length ?? 0
+  const isFinal = c.status === 'issued' || c.stage === 'Completed'
 
   return (
     <div className={`card p-3.5 border ${cardBorder}`}>
@@ -164,39 +216,56 @@ function CaseCard({ c, now, onResolve, supervisor }) {
         </div>
       )}
       <div className="flex items-start justify-between gap-2">
-        <div className="text-[11px] font-mono text-ink-500">{c.id}</div>
+        <div className="text-[11px] font-mono text-ink-500">#{c.id} · {c.case_type}</div>
         {c.escalated && (
-          <span className="chip bg-breach text-white animate-pulseDot">▲ Escalated · {c.escalationTier}</span>
+          <span className="chip bg-breach text-white animate-pulseDot">▲ Escalated</span>
         )}
       </div>
       <h4 className="font-semibold text-indigo-900 text-sm leading-snug mt-1">{c.title}</h4>
-      <div className="text-xs text-ink-500 mt-1">{c.citizen}</div>
+      <div className="text-xs text-ink-500 mt-1">{c.citizen_name}</div>
 
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <span className="chip bg-indigo-800/10 text-indigo-800">{c.department}</span>
-        <PriorityDot priority={c.priority} />
+      </div>
+
+      {/* Stage / route progress */}
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-ink-500">
+          <span>Stage: <span className="font-semibold text-ink-700">{c.stage}</span></span>
+          <span>{Math.min(c.stage_index + 1, routeLen)}/{routeLen}</span>
+        </div>
+        <div className="mt-1 flex gap-1">
+          {c.route?.map((r, i) => (
+            <span
+              key={i}
+              title={`${r.stage} (${r.role})`}
+              className={`h-1.5 flex-1 rounded-full ${i <= c.stage_index ? 'bg-teal-500' : 'bg-ink-100'}`}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="mt-3 pt-3 border-t border-ink-100 flex items-center justify-between">
         <div>
           <div className="text-[10px] uppercase tracking-wide text-ink-500">
-            {sla.breached ? 'Overdue by' : 'SLA remaining'}
+            {done ? 'SLA' : overdue ? 'Overdue by' : 'SLA remaining'}
           </div>
           <div className={`font-mono font-bold text-sm ${timerColor}`}>
-            {c.status === 'Resolved' ? '—' : sla.text}
+            {done ? '—' : `${overdue ? '+' : ''}${fmtDuration(remaining)}`}
           </div>
         </div>
-        {c.status === 'Resolved' ? (
-          <StatusBadge status="Resolved" />
-        ) : isOpen ? (
-          <button onClick={onResolve} className="text-xs font-semibold text-teal-700 hover:text-teal-600">
-            Mark resolved
-          </button>
-        ) : (
-          <StatusBadge status={c.status} />
-        )}
+        <StatusBadge status={c.status === 'issued' ? 'Issued' : c.escalated ? 'Breached' : 'In Progress'} />
       </div>
-      <div className="text-[10px] text-ink-500 mt-2">Filed {fmtDate(c.createdAt)} · SLA {c.slaHours}h</div>
+
+      {!isFinal && (
+        <div className="mt-3 flex items-center gap-2">
+          <button onClick={onAdvance} className="btn-primary flex-1 py-1.5 text-xs">Advance →</button>
+          {!c.escalated && (
+            <button onClick={onEscalate} className="btn-ghost py-1.5 text-xs">Escalate</button>
+          )}
+        </div>
+      )}
+      <div className="text-[10px] text-ink-500 mt-2">Filed {fmtDate(c.created_at)} · SLA {c.sla_hours}h · {c.assigned_role}</div>
     </div>
   )
 }
