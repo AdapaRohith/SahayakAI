@@ -97,7 +97,7 @@ export default function Officer() {
         right={
           <div className="flex items-center gap-3 text-sm">
             <span className="text-ink-500">Signed in as</span>
-            <span className="chip bg-indigo-800 text-white">{role} · {actor}</span>
+            <span className="chip bg-ink-950 text-white">{role} · {actor}</span>
           </div>
         }
       />
@@ -106,7 +106,7 @@ export default function Officer() {
         {/* Draft builder */}
         <div className="space-y-4">
           <div className="card p-4">
-            <h3 className="font-bold text-indigo-900 mb-3">1 · Pick a document template</h3>
+            <h3 className="font-bold text-ink-950 mb-3">1 · Pick a document template</h3>
             {templatesQ.isLoading ? (
               <Skeleton rows={2} />
             ) : (
@@ -115,13 +115,13 @@ export default function Officer() {
                   <button
                     key={tpl.id}
                     onClick={() => setTemplateId(tpl.id)}
-                    className={`text-left rounded-lg border p-3 transition-all ${
+                    className={`text-left rounded-lg border p-3 transition-all duration-200 active:scale-[0.99] ${
                       templateId === tpl.id
-                        ? 'border-indigo-600 bg-indigo-800/5 ring-1 ring-indigo-600'
-                        : 'border-ink-300 hover:border-indigo-600/50'
+                        ? 'border-accent-600 bg-accent-50 ring-1 ring-accent-600'
+                        : 'border-ink-300 hover:border-ink-500'
                     }`}
                   >
-                    <div className="text-sm font-bold text-indigo-900 leading-tight">{tpl.name}</div>
+                    <div className="text-sm font-bold text-ink-950 leading-tight">{tpl.name}</div>
                     <div className="text-[11px] text-ink-500 mt-0.5 line-clamp-2">{tpl.description}</div>
                   </button>
                 ))}
@@ -130,14 +130,14 @@ export default function Officer() {
           </div>
 
           <div className="card p-4">
-            <h3 className="font-bold text-indigo-900 mb-3">2 · Attach a case</h3>
+            <h3 className="font-bold text-ink-950 mb-3">2 · Attach a case</h3>
             {casesQ.isLoading ? (
               <Skeleton rows={1} />
             ) : (
               <select
                 value={caseId}
                 onChange={(e) => setCaseId(e.target.value)}
-                className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
               >
                 <option value="">— Select a case —</option>
                 {cases.map((c) => (
@@ -166,7 +166,7 @@ export default function Officer() {
           {/* Session queue */}
           {docs.length > 0 && (
             <div className="card overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-ink-100">
+              <div className="px-4 py-2.5 border-b border-ink-200">
                 <h3 className="font-bold text-ink-700 text-sm">This session's drafts</h3>
               </div>
               <div className="divide-y divide-ink-100">
@@ -175,10 +175,10 @@ export default function Officer() {
                     key={d.id}
                     onClick={() => setSelectedId(d.id)}
                     className={`w-full text-left p-3 flex items-center justify-between gap-2 transition-colors ${
-                      selectedId === d.id ? 'bg-teal-500/5' : 'hover:bg-ink-100/50'
+                      selectedId === d.id ? 'bg-ink-100' : 'hover:bg-ink-50'
                     }`}
                   >
-                    <span className="text-sm font-semibold text-indigo-900 truncate">
+                    <span className="text-sm font-semibold text-ink-950 truncate">
                       Doc #{d.id} · case #{d.case_id}
                     </span>
                     <StatusBadge status={STATUS_LABEL[d.status] || d.status} />
@@ -193,7 +193,7 @@ export default function Officer() {
         <div className="space-y-4">
           {!selected ? (
             <div className="card p-10 text-center text-sm text-ink-500 h-full flex flex-col items-center justify-center">
-              <Shield className="h-10 w-10 text-ink-300 mb-3" />
+              <Shield className="h-10 w-10 text-ink-400 mb-3" />
               Generate a draft on the left to review, edit and issue it here.
             </div>
           ) : (
@@ -201,8 +201,8 @@ export default function Officer() {
               <div className="card p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-widest text-teal-600">Document #{selected.id}</div>
-                    <h3 className="text-lg font-extrabold text-indigo-900">Case #{selected.case_id} · Template #{selected.template_id}</h3>
+                    <div className="text-xs font-bold uppercase tracking-widest text-ink-500">Document #{selected.id}</div>
+                    <h3 className="text-lg font-extrabold text-ink-950">Case #{selected.case_id} · Template #{selected.template_id}</h3>
                   </div>
                   <StatusPill status={selected.status} />
                 </div>
@@ -213,7 +213,7 @@ export default function Officer() {
                   onChange={(e) => setEditContent(e.target.value)}
                   disabled={selected.status !== 'draft'}
                   rows={16}
-                  className="w-full rounded-lg border border-ink-300 px-3.5 py-3 font-mono text-[13px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:bg-ink-100/60 disabled:text-ink-500"
+                  className="w-full rounded-lg border border-ink-300 px-3.5 py-3 font-mono text-[13px] leading-relaxed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors disabled:bg-ink-100/60 disabled:text-ink-500"
                 />
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-[11px] text-ink-500">
@@ -238,9 +238,9 @@ export default function Officer() {
                     checked={reviewed}
                     onChange={(e) => setReviewed(e.target.checked)}
                     disabled={selected.status !== 'draft'}
-                    className="h-4 w-4 rounded border-ink-300 text-indigo-700 focus:ring-indigo-600"
+                    className="h-4 w-4 rounded border-ink-300 text-accent-700 focus:ring-accent-600"
                   />
-                  <span className="text-sm font-semibold text-indigo-900">I reviewed this draft</span>
+                  <span className="text-sm font-semibold text-ink-950">I reviewed this draft</span>
                 </label>
 
                 <div className="flex items-center gap-3 mt-3">
@@ -286,7 +286,7 @@ function Skeleton({ rows = 2 }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-10 rounded-lg bg-ink-100 animate-pulse" />
+        <div key={i} className="h-10 skeleton" />
       ))}
     </div>
   )

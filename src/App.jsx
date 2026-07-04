@@ -11,7 +11,7 @@ const Audit = lazy(() => import('./pages/Audit.jsx'))
 const Admin = lazy(() => import('./pages/Admin.jsx'))
 
 function PageFallback() {
-  return <div className="py-20 text-center text-sm text-ink-500">Loading…</div>
+  return <div className="py-20 text-center text-sm text-ink-400">Loading…</div>
 }
 
 // Auth gate toggle. Kept OFF during testing so we don't sign in on every reload.
@@ -31,11 +31,13 @@ function Guard({ path, children }) {
 function AccessDenied({ path }) {
   const { role } = useApp()
   return (
-    <div className="mx-auto max-w-lg mt-20 card p-8 text-center">
-      <div className="text-5xl mb-3">🔒</div>
-      <h2 className="text-xl font-extrabold text-indigo-900">Access restricted</h2>
+    <div className="mx-auto max-w-lg mt-20 card p-8 text-center animate-slideIn">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-ink-950 text-white">
+        <LockIcon />
+      </div>
+      <h2 className="text-xl font-extrabold text-ink-950">Access restricted</h2>
       <p className="text-sm text-ink-500 mt-2">
-        The <span className="font-semibold">{role}</span> role cannot access{' '}
+        The <span className="font-semibold text-ink-800">{role}</span> role cannot access{' '}
         <code className="font-mono text-ink-700">{path}</code>. Switch roles using the selector in
         the top navigation to view this module.
       </p>
@@ -67,17 +69,26 @@ function AuthedShell() {
           <Route path="*" element={<Navigate to="/assistant" replace />} />
         </Routes>
       </main>
-      <footer className="border-t border-ink-100 bg-white py-4">
+      <footer className="border-t border-ink-200 bg-white py-4">
         <div className="mx-auto max-w-[1400px] px-4 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-500">
           <span>SahayakAI · Trustworthy, auditable, explainable government AI</span>
           <span className="flex items-center gap-2">
-            <span className="chip bg-approved-bg text-approved">Grounded</span>
-            <span className="chip bg-pending-bg text-pending">Human-approved</span>
-            <span className="chip bg-indigo-800 text-white">Immutable audit</span>
+            <span className="chip border border-ink-300 text-ink-700">Grounded</span>
+            <span className="chip border border-ink-300 text-ink-700">Human-approved</span>
+            <span className="chip bg-ink-950 text-white">Immutable audit</span>
           </span>
         </div>
       </footer>
     </div>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="11" width="16" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 018 0v3" strokeLinecap="round" />
+    </svg>
   )
 }
 

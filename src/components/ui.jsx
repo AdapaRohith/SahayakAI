@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
+
 // ---------------------------------------------------------------------------
-// Small presentational primitives shared across pages. Keeping status colors
-// centralised guarantees consistency: green=approved, amber=pending, red=breach.
+// Small presentational primitives shared across pages. The UI is monochrome;
+// the ONLY colour lives in the status trio below (green=approved, amber=pending,
+// red=breach) so the compliance signal stays meaningful and uncompeted-with.
 // ---------------------------------------------------------------------------
 
 const STATUS_STYLES = {
@@ -26,7 +29,7 @@ export function StatusBadge({ status, className = '' }) {
 }
 
 export function PriorityDot({ priority }) {
-  const color = priority === 'High' ? 'bg-breach' : priority === 'Low' ? 'bg-ink-300' : 'bg-teal-500'
+  const color = priority === 'High' ? 'bg-breach' : priority === 'Low' ? 'bg-ink-300' : 'bg-ink-700'
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500">
       <span className={`h-2 w-2 rounded-full ${color}`} />
@@ -37,12 +40,12 @@ export function PriorityDot({ priority }) {
 
 export function SectionTitle({ eyebrow, title, subtitle, right }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+    <div className="flex flex-wrap items-end justify-between gap-3 mb-4 animate-slideIn">
       <div>
         {eyebrow && (
-          <div className="text-xs font-bold uppercase tracking-widest text-teal-600 mb-1">{eyebrow}</div>
+          <div className="text-xs font-bold uppercase tracking-widest text-accent-700 mb-1">{eyebrow}</div>
         )}
-        <h1 className="text-2xl font-extrabold text-indigo-900 leading-tight">{title}</h1>
+        <h1 className="text-2xl font-extrabold text-ink-950 leading-tight tracking-tight">{title}</h1>
         {subtitle && <p className="text-sm text-ink-500 mt-1 max-w-2xl">{subtitle}</p>}
       </div>
       {right}
@@ -52,15 +55,17 @@ export function SectionTitle({ eyebrow, title, subtitle, right }) {
 
 export function Stat({ label, value, sub, tone = 'default' }) {
   const tones = {
-    default: 'text-indigo-900',
+    default: 'text-ink-950',
     good: 'text-approved',
     warn: 'text-pending',
     bad: 'text-breach',
   }
   return (
-    <div className="card p-4">
+    <div className="card card-hover p-4">
       <div className="text-xs font-semibold uppercase tracking-wide text-ink-500">{label}</div>
-      <div className={`text-3xl font-extrabold mt-1 ${tones[tone]}`}>{value}</div>
+      <div className={`text-3xl font-extrabold mt-1 tabular-nums ${tones[tone]}`}>
+        <CountUp value={value} />
+      </div>
       {sub && <div className="text-xs text-ink-500 mt-1">{sub}</div>}
     </div>
   )
@@ -72,7 +77,7 @@ export function CiteChip({ n, onClick, active }) {
     <button
       onClick={onClick}
       className={`inline-flex items-center justify-center align-super h-4 min-w-4 px-1 mx-0.5 rounded text-[10px] font-bold leading-none transition-colors ${
-        active ? 'bg-teal-600 text-white' : 'bg-teal-500/15 text-teal-700 hover:bg-teal-500/30'
+        active ? 'bg-accent-700 text-white' : 'bg-accent-50 text-accent-800 hover:bg-accent-100'
       }`}
       title={`Source ${n}`}
     >
@@ -88,4 +93,57 @@ export function Shield({ className = 'h-4 w-4' }) {
       <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Motion helpers
+// ---------------------------------------------------------------------------
+
+// Tracks the OS "reduce motion" setting so animated primitives can opt out.
+export function useReducedMotion() {
+  const [reduced, setReduced] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setReduced(mq.matches)
+    const on = (e) => setReduced(e.matches)
+    mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  return reduced
+}
+
+// Counts a numeric value up on mount. Preserves any prefix/suffix (%, d, m…)
+// and snaps straight to the final value when reduced motion is requested or
+// the value has no leading number.
+function CountUp({ value }) {
+  const reduced = useReducedMotion()
+  const str = String(value)
+  const parts = str.match(/^(\D*)(\d[\d,]*\.?\d*)(.*)$/s)
+  const [display, setDisplay] = useState(str)
+
+  useEffect(() => {
+    if (!parts || reduced) {
+      setDisplay(str)
+      return
+    }
+    const prefix = parts[1]
+    const suffix = parts[3]
+    const target = parseFloat(parts[2].replace(/,/g, ''))
+    const decimals = (parts[2].split('.')[1] || '').length
+    let raf
+    let start
+    const dur = 700
+    const tick = (t) => {
+      start ??= t
+      const p = Math.min((t - start) / dur, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setDisplay(`${prefix}${(target * eased).toFixed(decimals)}${suffix}`)
+      if (p < 1) raf = requestAnimationFrame(tick)
+      else setDisplay(str)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [str]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <>{display}</>
 }

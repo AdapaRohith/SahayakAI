@@ -4,59 +4,88 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Deep indigo — primary institutional brand
-        indigo: {
-          950: '#1a1442',
-          900: '#241a5c',
-          800: '#2e2178',
-          700: '#3b2b96',
-          600: '#4c39b8',
-          500: '#6046d6',
-        },
-        // Teal — accent / AI actions
-        teal: {
-          700: '#0f6e6a',
-          600: '#0d8b84',
-          500: '#12a89f',
-          400: '#3cc6bd',
-          300: '#7dddd6',
-        },
-        // Status semantics
-        approved: '#15803d',   // green
-        'approved-bg': '#dcfce7',
-        pending: '#b45309',    // amber
-        'pending-bg': '#fef3c7',
-        breach: '#b91c1c',     // red
-        'breach-bg': '#fee2e2',
+        // ---------------------------------------------------------------
+        // Government/Public-service theme. Cool slate neutrals carry all the
+        // chrome (surfaces, text, borders); `ink-900/950` is the institutional
+        // navy used for primary commit actions and headings.
+        // ---------------------------------------------------------------
         ink: {
-          900: '#111827',
-          700: '#374151',
-          500: '#6b7280',
-          300: '#d1d5db',
-          100: '#f3f4f6',
+          950: '#020617',
+          900: '#0f172a',
+          800: '#1e293b',
+          700: '#334155',
+          600: '#475569',
+          500: '#64748b',
+          400: '#94a3b8',
+          300: '#cbd5e1',
+          200: '#e2e8f0',
+          100: '#f1f5f9',
+          50: '#f8fafc',
         },
+        // Single brand accent — a confident public-sector blue. Used sparingly
+        // for interactive state: active nav, focus rings, selections, AI actions,
+        // links. This is the ONE hue that carries the theme; everything else is
+        // slate neutral so the UI stays calm and un-maximal.
+        accent: {
+          950: '#082f49',
+          900: '#0c4a6e',
+          800: '#075985',
+          700: '#0369a1',
+          600: '#0284c7',
+          500: '#0ea5e9',
+          100: '#e0f2fe',
+          50: '#f0f9ff',
+        },
+        // Semantic status — reserved strictly for the three compliance states
+        // so the signal stays meaningful and never competes with the accent.
+        approved: '#15803d',
+        'approved-bg': '#dcfce7',
+        pending: '#b45309',
+        'pending-bg': '#fef3c7',
+        breach: '#b91c1c',
+        'breach-bg': '#fee2e2',
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       boxShadow: {
-        card: '0 1px 3px rgba(16,24,40,0.08), 0 1px 2px rgba(16,24,40,0.04)',
-        panel: '0 4px 24px rgba(26,20,66,0.10)',
+        // Flat by default; elevation is a hover affordance, not decoration.
+        card: '0 1px 2px rgba(0,0,0,0.04)',
+        lift: '0 6px 24px rgba(0,0,0,0.10)',
+        panel: '0 8px 40px rgba(0,0,0,0.16)',
       },
       keyframes: {
         pulseDot: {
           '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.35' },
+          '50%': { opacity: '0.3' },
         },
+        // Content enter — used per-route and staggered for lists.
         slideIn: {
-          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // Mono skeleton — a light sweep across the placeholder.
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        // Concentric ring for the live mic state.
+        ring: {
+          '0%': { transform: 'scale(0.9)', opacity: '0.6' },
+          '100%': { transform: 'scale(1.8)', opacity: '0' },
         },
       },
       animation: {
         pulseDot: 'pulseDot 1.4s ease-in-out infinite',
-        slideIn: 'slideIn 0.25s ease-out',
+        slideIn: 'slideIn 0.35s cubic-bezier(0.22,1,0.36,1)',
+        fadeUp: 'fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both',
+        shimmer: 'shimmer 1.6s ease-in-out infinite',
+        ring: 'ring 1.4s ease-out infinite',
       },
     },
   },

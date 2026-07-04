@@ -107,7 +107,7 @@ export default function Workflow() {
               value={title}
               onChange={(e) => { setTitle(e.target.value); setPreview(null) }}
               placeholder="e.g. Transfer my father's land to my name / income certificate for PM-KISAN"
-              className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors"
             />
           </div>
           <div>
@@ -116,7 +116,7 @@ export default function Workflow() {
               value={citizen}
               onChange={(e) => setCitizen(e.target.value)}
               placeholder="Required"
-              className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors"
             />
           </div>
           <div className="flex gap-2">
@@ -127,12 +127,12 @@ export default function Workflow() {
           </div>
         </div>
         {preview && (
-          <div className="mt-3 rounded-lg bg-teal-500/5 border border-teal-500/20 p-3 text-xs">
-            <span className="font-semibold text-teal-700">Classified as {preview.case_type}</span>
+          <div className="mt-3 rounded-lg bg-ink-50 border border-ink-200 p-3 text-xs animate-fadeUp">
+            <span className="font-semibold text-ink-950">Classified as {preview.case_type}</span>
             <span className="text-ink-500"> · {preview.department} · confidence {(preview.confidence * 100).toFixed(0)}%</span>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {preview.route?.map((r, i) => (
-                <span key={i} className="chip bg-indigo-800/10 text-indigo-800">
+                <span key={i} className="chip bg-ink-100 text-ink-700 border border-ink-200">
                   {r.stage} · {r.sla_hours}h
                 </span>
               ))}
@@ -145,7 +145,7 @@ export default function Workflow() {
       {/* Board */}
       {casesQ.isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {COLUMNS.map((c) => <div key={c.key} className="h-40 rounded-xl bg-ink-100 animate-pulse" />)}
+          {COLUMNS.map((c) => <div key={c.key} className="h-40 skeleton !rounded-xl" />)}
         </div>
       ) : casesQ.isError ? (
         <div className="card p-6 text-sm text-breach">Could not load cases: {casesQ.error.message}</div>
@@ -156,7 +156,7 @@ export default function Workflow() {
             return (
               <div key={col.key} className="flex flex-col">
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <h3 className="font-bold text-sm text-indigo-900">{col.label}</h3>
+                  <h3 className="font-bold text-sm text-ink-950">{col.label}</h3>
                   <span className={`chip ${
                     col.tone === 'breach' ? 'bg-breach-bg text-breach'
                     : col.tone === 'approved' ? 'bg-approved-bg text-approved'
@@ -209,7 +209,7 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
   const isFinal = c.status === 'issued' || c.stage === 'Completed'
 
   return (
-    <div className={`card p-3.5 border ${cardBorder}`}>
+    <div className={`card card-hover p-3.5 border ${cardBorder}`}>
       {supervisorFlag && (
         <div className="-mx-3.5 -mt-3.5 mb-2.5 px-3.5 py-1 bg-breach text-white text-[10px] font-bold uppercase tracking-wide rounded-t-xl flex items-center gap-1.5">
           ▲ Supervisor attention — escalated
@@ -221,11 +221,11 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
           <span className="chip bg-breach text-white animate-pulseDot">▲ Escalated</span>
         )}
       </div>
-      <h4 className="font-semibold text-indigo-900 text-sm leading-snug mt-1">{c.title}</h4>
+      <h4 className="font-semibold text-ink-950 text-sm leading-snug mt-1">{c.title}</h4>
       <div className="text-xs text-ink-500 mt-1">{c.citizen_name}</div>
 
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        <span className="chip bg-indigo-800/10 text-indigo-800">{c.department}</span>
+        <span className="chip bg-ink-100 text-ink-700 border border-ink-200">{c.department}</span>
       </div>
 
       {/* Stage / route progress */}
@@ -239,7 +239,7 @@ function CaseCard({ c, now, fetchedAt, supervisor, onAdvance, onEscalate }) {
             <span
               key={i}
               title={`${r.stage} (${r.role})`}
-              className={`h-1.5 flex-1 rounded-full ${i <= c.stage_index ? 'bg-teal-500' : 'bg-ink-100'}`}
+              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${i <= c.stage_index ? 'bg-accent-600' : 'bg-ink-200'}`}
             />
           ))}
         </div>

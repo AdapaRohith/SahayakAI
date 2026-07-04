@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { useChat } from '../lib/queries.js'
-import { api } from '../api.js'
 import { useSpeech } from '../lib/useSpeech.js'
 import CitationPanel from '../components/CitationPanel.jsx'
 import { SectionTitle, Shield } from '../components/ui.jsx'
@@ -50,32 +49,6 @@ export default function Assistant() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, chat.isPending])
 
-  // On-demand translation: whenever a non-English language is active, make sure
-  // every assistant answer has a cached translation (mock backend prefixes
-  // "[hi] "/"[te] " so the toggle visibly works offline).
-  useEffect(() => {
-    if (lang === 'en') return
-    let cancelled = false
-    const missing = messages.filter((m) => m.role === 'assistant' && !m.tText[lang])
-    if (!missing.length) return
-    ;(async () => {
-      for (const m of missing) {
-        try {
-          const { translated } = await api.translate(m.tText.en, lang)
-          if (cancelled) return
-          setMessages((prev) =>
-            prev.map((x) => (x.id === m.id ? { ...x, tText: { ...x.tText, [lang]: translated } } : x)),
-          )
-        } catch {
-          /* leave English fallback */
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [lang, messages])
-
   async function submit(raw) {
     const text = (raw ?? input).trim()
     if (!text || chat.isPending) return
@@ -89,7 +62,7 @@ export default function Assistant() {
       const botMsg = {
         id: `a_${Date.now()}`,
         role: 'assistant',
-        tText: { en: res.answer ?? '' },
+        text: res.answer ?? '',
         citations,
         usedChunks,
       }
@@ -99,7 +72,7 @@ export default function Assistant() {
     } catch (err) {
       setMessages((m) => [
         ...m,
-        { id: `e_${Date.now()}`, role: 'assistant', error: true, tText: { en: `Could not reach the assistant. ${err.message}` }, citations: [], usedChunks: [] },
+        { id: `e_${Date.now()}`, role: 'assistant', error: true, text: `Could not reach the assistant. ${err.message}`, citations: [], usedChunks: [] },
       ])
     }
   }
@@ -117,8 +90,8 @@ export default function Assistant() {
                 key={l.id}
                 onClick={() => setLang(l.id)}
                 aria-pressed={lang === l.id}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                  lang === l.id ? 'bg-indigo-800 text-white' : 'text-ink-700 hover:bg-ink-100'
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all duration-150 active:scale-[0.97] ${
+                  lang === l.id ? 'bg-accent-700 text-white' : 'text-ink-700 hover:bg-ink-100'
                 }`}
               >
                 {l.native}
@@ -133,11 +106,11 @@ export default function Assistant() {
         <div className="card flex flex-col h-[70vh] min-h-[520px] overflow-hidden">
           <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-slim p-4 space-y-4">
             {messages.length === 0 && !chat.isPending && (
-              <div className="h-full flex flex-col items-center justify-center text-center px-6">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-800 text-white mb-4">
+              <div className="h-full flex flex-col items-center justify-center text-center px-6 animate-fadeUp">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600 text-white mb-4 shadow-sm">
                   <Shield className="h-7 w-7" />
                 </span>
-                <h3 className="text-lg font-bold text-indigo-900">How can I help you today?</h3>
+                <h3 className="text-lg font-bold text-ink-950">How can I help you today?</h3>
                 <p className="text-sm text-ink-500 mt-1 max-w-sm">
                   I answer from verified government policy sources. Tap the mic to speak in your language.
                 </p>
@@ -146,29 +119,29 @@ export default function Assistant() {
 
             {messages.map((m) =>
               m.role === 'user' ? (
-                <div key={m.id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-indigo-800 text-white px-4 py-2.5 text-[15px]">
+                <div key={m.id} className="flex justify-end animate-fadeUp">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent-700 text-white px-4 py-2.5 text-[15px]">
                     {m.text}
                   </div>
                 </div>
               ) : (
-                <div key={m.id} className="flex justify-start">
+                <div key={m.id} className="flex justify-start animate-fadeUp">
                   <div
                     className={`max-w-[92%] rounded-2xl rounded-bl-sm px-4 py-3 border ${
-                      m.error ? 'bg-breach-bg/50 border-breach/30' : 'bg-white border-ink-100'
+                      m.error ? 'bg-breach-bg/50 border-breach/30' : 'bg-white border-ink-200'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="flex h-5 w-5 items-center justify-center rounded bg-teal-600 text-white">
+                      <span className="flex h-5 w-5 items-center justify-center rounded bg-ink-900 text-white">
                         <Shield className="h-3 w-3" />
                       </span>
-                      <span className="text-xs font-bold text-indigo-900">GovAssist AI</span>
+                      <span className="text-xs font-bold text-ink-900">GovAssist AI</span>
                       {!m.error && m.citations.length > 0 && (
                         <span className="chip bg-approved-bg text-approved">✓ {m.citations.length} source{m.citations.length > 1 ? 's' : ''}</span>
                       )}
                     </div>
 
-                    <AnswerText text={m.tText[lang] ?? m.tText.en} />
+                    <AnswerText text={m.text} />
 
                     {/* Inline citation chips (source_ref, title on hover) */}
                     {!m.error && m.citations.length > 0 && (
@@ -181,10 +154,10 @@ export default function Assistant() {
                               setPanel({ citations: m.citations, usedChunks: m.usedChunks })
                               setActiveRef(c.source_ref)
                             }}
-                            className={`chip transition-colors ${
+                            className={`chip transition-colors duration-150 ${
                               activeRef === c.source_ref
-                                ? 'bg-teal-600 text-white'
-                                : 'bg-teal-500/15 text-teal-700 hover:bg-teal-500/30'
+                                ? 'bg-accent-700 text-white'
+                                : 'bg-accent-50 text-accent-800 hover:bg-accent-100'
                             }`}
                           >
                             {c.source_ref}
@@ -195,7 +168,7 @@ export default function Assistant() {
 
                     {!m.error && (
                       <div className="mt-2.5 pt-2 border-t border-ink-100 text-[11px] text-ink-500">
-                        <span className="font-semibold text-teal-700">Why trustworthy:</span> grounded in{' '}
+                        <span className="font-semibold text-accent-800">Why trustworthy:</span> grounded in{' '}
                         {m.citations.length} retrieved policy source{m.citations.length > 1 ? 's' : ''} · logged to the audit trail.
                       </div>
                     )}
@@ -205,9 +178,9 @@ export default function Assistant() {
             )}
 
             {chat.isPending && (
-              <div className="flex justify-start">
-                <div className="rounded-2xl rounded-bl-sm bg-white border border-ink-100 px-4 py-3 flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-teal-500 animate-pulseDot" />
+              <div className="flex justify-start animate-fadeUp">
+                <div className="rounded-2xl rounded-bl-sm bg-white border border-ink-200 px-4 py-3 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-accent-600 animate-pulseDot" />
                   <span className="text-sm text-ink-500">Retrieving grounded sources…</span>
                 </div>
               </div>
@@ -222,7 +195,7 @@ export default function Assistant() {
                 key={s}
                 onClick={() => submit(s)}
                 disabled={chat.isPending}
-                className="text-xs px-2.5 py-1 rounded-full border border-ink-300 hover:border-teal-500 hover:bg-teal-500/5 text-ink-700 transition-colors disabled:opacity-50"
+                className="text-xs px-2.5 py-1 rounded-full border border-ink-300 hover:border-accent-500 hover:bg-accent-50 hover:text-accent-800 text-ink-700 transition-colors disabled:opacity-40"
               >
                 {s.length > 42 ? `${s.slice(0, 42)}…` : s}
               </button>
@@ -237,11 +210,14 @@ export default function Assistant() {
                 disabled={!supported}
                 title={supported ? 'Voice input' : 'Voice input not supported in this browser'}
                 aria-label={listening ? 'Stop voice input' : 'Start voice input'}
-                className={`btn h-11 w-11 shrink-0 rounded-xl p-0 ${
-                  listening ? 'bg-breach text-white animate-pulseDot' : 'bg-teal-600 text-white hover:bg-teal-700'
+                className={`btn relative h-11 w-11 shrink-0 rounded-xl p-0 overflow-visible ${
+                  listening ? 'bg-accent-800 text-white' : 'bg-accent-700 text-white hover:bg-accent-800'
                 } disabled:bg-ink-300`}
               >
-                <MicIcon />
+                {listening && (
+                  <span aria-hidden className="absolute inset-0 rounded-xl bg-accent-600 animate-ring" />
+                )}
+                <span className="relative"><MicIcon /></span>
               </button>
               <textarea
                 rows={1}
@@ -251,7 +227,7 @@ export default function Assistant() {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
                 }}
                 placeholder={listening ? t.listening : t.placeholder}
-                className="flex-1 resize-none rounded-xl border border-ink-300 px-3.5 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-indigo-600 max-h-32"
+                className="flex-1 resize-none rounded-xl border border-ink-300 px-3.5 py-2.5 text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors max-h-32"
               />
               <button onClick={() => submit()} disabled={chat.isPending} className="btn-primary h-11 rounded-xl">
                 {t.send}
@@ -262,8 +238,8 @@ export default function Assistant() {
                 <span>⚠</span> {micError}
               </p>
             ) : listening ? (
-              <p className="text-[11px] text-teal-700 mt-1.5 px-1 flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-teal-600 animate-pulseDot" /> Listening — speak now.
+              <p className="text-[11px] text-accent-800 mt-1.5 px-1 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-600 animate-pulseDot" /> Listening — speak now.
               </p>
             ) : !supported ? (
               <p className="text-[11px] text-ink-500 mt-1.5 px-1">
@@ -283,7 +259,7 @@ export default function Assistant() {
           />
           <p className="text-[11px] text-ink-500 mt-3 px-1 leading-relaxed">
             Click any citation to read the retrieved source text. Every question is written to the
-            audit trail — see <span className="font-semibold">Audit Trail</span>.
+            audit trail — see <span className="font-semibold text-ink-800">Audit Trail</span>.
           </p>
         </div>
       </div>

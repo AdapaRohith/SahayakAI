@@ -18,11 +18,13 @@ const ACTIONS = {
   escalate: { label: 'Case escalated', tone: 'breach', glyph: '▲' },
 }
 
-const TONE_DOT = { teal: 'bg-teal-500', breach: 'bg-breach', approved: 'bg-approved', pending: 'bg-pending', indigo: 'bg-indigo-600' }
+// Non-status action tones collapse to monochrome; the three compliance
+// states keep their semantic colour so they still read at a glance.
+const TONE_DOT = { teal: 'bg-ink-600', breach: 'bg-breach', approved: 'bg-approved', pending: 'bg-pending', indigo: 'bg-ink-950' }
 const TONE_CHIP = {
-  teal: 'bg-teal-500/15 text-teal-700', breach: 'bg-breach-bg text-breach',
+  teal: 'bg-ink-100 text-ink-700', breach: 'bg-breach-bg text-breach',
   approved: 'bg-approved-bg text-approved', pending: 'bg-pending-bg text-pending',
-  indigo: 'bg-indigo-800/10 text-indigo-800',
+  indigo: 'bg-ink-100 text-ink-800',
 }
 
 export default function Audit() {
@@ -73,7 +75,7 @@ export default function Audit() {
         title="Every action, permanently recorded"
         subtitle="Append-only and read-only (§18 R4). Each row is chained to the one before it for a tamper-evident view — nothing here can be edited or deleted."
         right={
-          <span className="chip bg-indigo-800 text-white flex items-center gap-1.5">
+          <span className="chip bg-ink-950 text-white flex items-center gap-1.5">
             <Shield className="h-3.5 w-3.5" /> {audit.length} entries · read-only
           </span>
         }
@@ -86,7 +88,7 @@ export default function Audit() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search actor, action, or summary…"
-            className="w-full rounded-lg border border-ink-300 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            className="w-full rounded-lg border border-ink-300 pl-9 pr-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors"
           />
           <svg viewBox="0 0 24 24" className="h-4 w-4 absolute left-3 top-2.5 text-ink-500" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" strokeLinecap="round" />
@@ -95,7 +97,7 @@ export default function Audit() {
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="rounded-lg border border-ink-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+          className="rounded-lg border border-ink-300 px-3 py-2 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
         >
           <option value="all">All actions ({audit.length})</option>
           {Object.entries(ACTIONS).map(([k, v]) => (
@@ -117,13 +119,13 @@ export default function Audit() {
             const isLast = i === rows.length - 1
             const chain = chained[e.id] || { prevHash: '—', hash: '—' }
             return (
-              <li key={e.id} className={`relative flex gap-4 px-5 py-4 hover:bg-ink-100/40 transition-colors ${isLast ? '' : 'border-b border-ink-100'}`}>
+              <li key={e.id} className={`relative flex gap-4 px-5 py-4 hover:bg-ink-50 transition-colors ${isLast ? '' : 'border-b border-ink-100'}`}>
                 <div className="flex flex-col items-center pt-1">
                   <span className={`z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-sm ${TONE_DOT[meta.tone]}`}>
                     {meta.glyph}
                   </span>
                   {!isLast && (
-                    <span aria-hidden title="Hash chain link" className="w-0.5 flex-1 mt-1 rounded bg-gradient-to-b from-indigo-600/50 to-indigo-600/10" />
+                    <span aria-hidden title="Hash chain link" className="w-0.5 flex-1 mt-1 rounded bg-gradient-to-b from-ink-400 to-ink-200" />
                   )}
                 </div>
 
@@ -139,16 +141,16 @@ export default function Audit() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-xs">
                     <span className="text-ink-500">
                       Actor:{' '}
-                      <span className="font-semibold text-indigo-800">{e.actor}</span>
+                      <span className="font-semibold text-ink-950">{e.actor}</span>
                     </span>
                   </div>
 
                   {/* Tamper-evidence hash chain */}
                   <div className="mt-2.5 flex items-center gap-2 text-[10px] font-mono text-ink-500">
-                    <span className="text-ink-300">prev</span>
+                    <span className="text-ink-400">prev</span>
                     <code className="rounded bg-ink-100 px-1.5 py-0.5">{chain.prevHash}</code>
-                    <span className="text-ink-300">→</span>
-                    <span className="flex items-center gap-1 rounded bg-indigo-800/10 px-1.5 py-0.5 text-indigo-800 font-bold">
+                    <span className="text-ink-400">→</span>
+                    <span className="flex items-center gap-1 rounded bg-ink-950 px-1.5 py-0.5 text-white font-bold">
                       <Shield className="h-3 w-3" /> {chain.hash}
                     </span>
                   </div>

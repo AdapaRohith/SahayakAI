@@ -8,42 +8,77 @@
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-ink-100 text-ink-900 font-sans;
+    @apply bg-ink-50 text-ink-900 font-sans;
   }
   ::selection {
-    background: #7dddd6;
-    color: #1a1442;
+    background: #0369a1;
+    color: #ffffff;
   }
 }
 
 @layer components {
+  /* Flat card, hairline border. Elevation appears only on hover as a cue. */
   .card {
-    @apply bg-white rounded-xl shadow-card border border-ink-100;
+    @apply bg-white rounded-xl border border-ink-200 shadow-card;
   }
+  .card-hover {
+    @apply transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-ink-300 hover:shadow-lift;
+  }
+
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+           transition-all duration-150 ease-out
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-1
+           active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
   }
+  /* Primary = institutional navy. The strongest commit action on a screen. */
   .btn-primary {
-    @apply btn bg-indigo-800 text-white hover:bg-indigo-700 focus:ring-indigo-600;
+    @apply btn bg-ink-900 text-white hover:bg-ink-800;
   }
+  /* AI / accent action — the one place the brand blue leads a button. */
   .btn-teal {
-    @apply btn bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500;
+    @apply btn bg-accent-700 text-white hover:bg-accent-800;
   }
   .btn-ghost {
-    @apply btn bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 focus:ring-indigo-600;
+    @apply btn bg-white text-ink-700 border border-ink-300 hover:border-accent-600 hover:text-accent-800 hover:bg-accent-50;
   }
+  /* Destructive keeps its semantic red — the one exception to mono buttons. */
   .btn-danger {
-    @apply btn bg-breach text-white hover:bg-red-800 focus:ring-red-500;
+    @apply btn bg-breach text-white hover:bg-red-800;
   }
+
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
   .field-label {
     @apply block text-xs font-semibold uppercase tracking-wide text-ink-500 mb-1;
   }
+
+  /* Mono skeleton block with a sweeping highlight. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-ink-100;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 animate-shimmer;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  }
 }
 
 /* Thin, unobtrusive scrollbars for panels */
 .scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
-.scroll-slim::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
+.scroll-slim::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 8px; }
+.scroll-slim::-webkit-scrollbar-thumb:hover { background: #a3a3a3; }
 .scroll-slim::-webkit-scrollbar-track { background: transparent; }
+
+/* Honour user motion preference — kill all non-essential animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

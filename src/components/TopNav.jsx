@@ -1,4 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { googleLogout } from '@react-oauth/google'
 import { useApp } from '../store/AppContext.jsx'
 import { useAudit } from '../lib/queries.js'
@@ -25,10 +26,36 @@ const ROLES = ['Citizen', 'Officer', 'Supervisor']
 export default function TopNav() {
   const { role, setRole, user, logout } = useApp()
   const navigate = useNavigate()
+  const location = useLocation()
   const auditQ = useAudit()
   const auditCount = auditQ.data?.length ?? 0
   const allowed = ROLE_ROUTES[role]
   const links = NAV.filter((n) => allowed.includes(n.to))
+
+  // Sliding active-tab indicator. We measure the active link and move a single
+  // underline bar to it — one shared element that glides between tabs.
+  const navRef = useRef(null)
+  const linkRefs = useRef({})
+  const [ind, setInd] = useState({ left: 0, width: 0, ready: false })
+
+  // Glass intensifies once the page scrolls — the bar lifts off the content.
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useLayoutEffect(() => {
+    const active = links.find((n) => location.pathname.startsWith(n.to))
+    const el = active && linkRefs.current[active.to]
+    if (el && navRef.current) {
+      setInd({ left: el.offsetLeft, width: el.offsetWidth, ready: true })
+    } else {
+      setInd((s) => ({ ...s, ready: false }))
+    }
+  }, [location.pathname, links.length, role])
 
   function handleLogout() {
     googleLogout()
@@ -37,56 +64,76 @@ export default function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-indigo-900 text-white shadow-panel">
+    <header
+      className={`sticky top-0 z-40 relative border-b transition-all duration-500 ease-out ${
+        scrolled
+          ? 'bg-white/70 backdrop-blur-xl border-ink-200 shadow-[0_6px_28px_rgba(0,0,0,0.07)]'
+          : 'bg-white/55 backdrop-blur-md border-transparent'
+      }`}
+    >
+      {/* Frosted top edge highlight — the glass catches light. */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ink-300/70 to-transparent" />
       <div className="mx-auto max-w-[1400px] px-4">
         <div className="flex h-16 items-center gap-4">
           {/* Brand */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600">
-              <Shield className="h-5 w-5 text-white" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-700 text-white shadow-sm transition-transform duration-200 hover:scale-105">
+              <Shield className="h-5 w-5" />
             </span>
             <div className="leading-tight">
-              <div className="font-extrabold tracking-tight">SahayakAI</div>
-              <div className="text-[10px] uppercase tracking-widest text-teal-300">Govt AI Copilot</div>
+              <div className="font-extrabold tracking-tight text-ink-950">SahayakAI</div>
+              <div className="text-[10px] uppercase tracking-widest text-ink-400">Govt AI Copilot</div>
             </div>
           </div>
 
-          {/* Nav links */}
-          <nav className="hidden md:flex items-center gap-1 ml-2 overflow-x-auto scroll-slim">
+          {/* Nav links with sliding underline + glass hover pill */}
+          <nav ref={navRef} className="relative hidden md:flex items-center gap-1 ml-2">
             {links.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
+                ref={(el) => (linkRefs.current[n.to] = el)}
                 className={({ isActive }) =>
-                  `px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors ${
-                    isActive ? 'bg-white/15 text-white' : 'text-indigo-100/80 hover:bg-white/10 hover:text-white'
+                  `px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-all duration-200 backdrop-blur-sm ${
+                    isActive
+                      ? 'text-accent-800 bg-accent-600/[0.08]'
+                      : 'text-ink-500 hover:text-ink-900 hover:bg-ink-900/[0.05]'
                   }`
                 }
               >
                 {n.label}
               </NavLink>
             ))}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -bottom-[1px] h-0.5 rounded-full bg-accent-600 transition-all duration-300 ease-out"
+              style={{
+                left: ind.left,
+                width: ind.width,
+                opacity: ind.ready ? 1 : 0,
+              }}
+            />
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
             {/* Live audit counter — reinforces "every action is logged" */}
-            <div className="hidden lg:flex items-center gap-1.5 text-xs text-teal-200">
-              <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulseDot" />
+            <div className="hidden lg:flex items-center gap-1.5 text-xs text-ink-500">
+              <span className="h-2 w-2 rounded-full bg-accent-600 animate-pulseDot" />
               {auditCount} audited actions
             </div>
 
             {/* Trust badge — nothing is issued without a human approval */}
-            <span className="hidden xl:inline-flex chip bg-approved-bg text-approved font-bold">
+            <span className="hidden xl:inline-flex chip border border-ink-300 text-ink-700 font-bold">
               ✓ 100% human-approved
             </span>
 
             {/* Role switcher (RBAC) */}
             <label className="flex items-center gap-2">
-              <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-indigo-200">Role</span>
+              <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-ink-400">Role</span>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="rounded-lg bg-indigo-800 border border-indigo-700 text-white text-sm font-semibold px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                className="rounded-lg bg-white border border-ink-300 text-ink-900 text-sm font-semibold px-2.5 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 hover:border-accent-500 transition-colors"
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -96,27 +143,27 @@ export default function TopNav() {
 
             {/* Signed-in Google user + logout */}
             {user && (
-              <div className="flex items-center gap-2 pl-2 sm:border-l sm:border-indigo-700/60">
+              <div className="flex items-center gap-2 pl-2 sm:border-l sm:border-ink-200">
                 {user.picture ? (
                   <img
                     src={user.picture}
                     alt=""
                     referrerPolicy="no-referrer"
-                    className="h-8 w-8 rounded-full border border-indigo-700 object-cover"
+                    className="h-8 w-8 rounded-full border border-ink-300 object-cover"
                   />
                 ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-sm font-bold">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-950 text-white text-sm font-bold">
                     {(user.name || '?').charAt(0).toUpperCase()}
                   </span>
                 )}
                 <div className="hidden sm:block leading-tight max-w-[140px]">
-                  <div className="text-xs font-semibold truncate">{user.name}</div>
-                  <div className="text-[10px] text-indigo-200 truncate">{user.email}</div>
+                  <div className="text-xs font-semibold text-ink-900 truncate">{user.name}</div>
+                  <div className="text-[10px] text-ink-400 truncate">{user.email}</div>
                 </div>
                 <button
                   onClick={handleLogout}
                   title="Sign out"
-                  className="rounded-lg p-1.5 text-indigo-100/80 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-950 transition-colors"
                   aria-label="Sign out"
                 >
                   <LogoutIcon />
@@ -133,8 +180,8 @@ export default function TopNav() {
               key={n.to}
               to={n.to}
               className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
-                  isActive ? 'bg-white/15 text-white' : 'text-indigo-100/80 hover:bg-white/10'
+                `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                  isActive ? 'bg-accent-700 text-white' : 'text-ink-500 hover:bg-ink-100'
                 }`
               }
             >
