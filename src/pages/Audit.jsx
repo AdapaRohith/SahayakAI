@@ -127,7 +127,7 @@ export default function Audit() {
                     {meta.glyph}
                   </span>
                   {!isLast && (
-                    <span aria-hidden title="Hash chain link" className="w-0.5 flex-1 mt-1 rounded bg-gradient-to-b from-ink-400 to-ink-200" />
+                    <span aria-hidden title={t.hashLink} className="w-0.5 flex-1 mt-1 rounded bg-gradient-to-b from-ink-400 to-ink-200" />
                   )}
                 </div>
 

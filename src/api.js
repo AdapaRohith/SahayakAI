@@ -40,12 +40,30 @@ const get = (path) => req(path)
 const post = (path, body) => req(path, { method: 'POST', body: JSON.stringify(body) })
 const put = (path, body) => req(path, { method: 'PUT', body: JSON.stringify(body) })
 
+// Multipart upload — do NOT set Content-Type; the browser adds the boundary.
+async function upload(path, formData) {
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, { method: 'POST', body: formData })
+  } catch (networkErr) {
+    throw new ApiError(0, `Cannot reach the backend at ${BASE}. (${networkErr.message})`)
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new ApiError(res.status, body || res.statusText)
+  }
+  const text = await res.text()
+  return text ? JSON.parse(text) : null
+}
+
 export const API_BASE = BASE
 
 export const api = {
-  // Chat & RAG
-  chat: (query, actor) => post('/chat', { query, actor }),
-  classify: (query, actor) => post('/classify', { query, actor }),
+  // Chat & RAG. `lang` (en|hi|te) asks the backend to answer in the
+  // user's selected language so the whole experience — not just the UI
+  // chrome — follows the language switcher.
+  chat: (query, actor, lang) => post('/chat', { query, actor, lang }),
+  classify: (query, actor, lang) => post('/classify', { query, actor, lang }),
   translate: (text, target) => post('/translate', { text, target }),
 
   // Cases + workflow
@@ -58,10 +76,18 @@ export const api = {
 
   // Documents lifecycle: draft → approve → issue
   getTemplates: () => get('/templates'),
-  draftDocument: (case_id, template_id, actor) => post('/documents/draft', { case_id, template_id, actor }),
+  draftDocument: (case_id, template_id, actor, lang) => post('/documents/draft', { case_id, template_id, actor, lang }),
   saveDocument: (id, content) => put(`/documents/${id}`, { content }),
   approveDocument: (id, actor) => post(`/documents/${id}/approve`, { actor }),
   issueDocument: (id, actor) => post(`/documents/${id}/issue`, { actor }),
+
+  // Document upload → OCR field extraction (multipart/form-data)
+  extract: (docType, file) => {
+    const fd = new FormData()
+    fd.append('doc_type', docType)
+    fd.append('file', file)
+    return upload('/extract', fd)
+  },
 
   // Schemes
   getSchemes: () => get('/schemes'),

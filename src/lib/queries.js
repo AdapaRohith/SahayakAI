@@ -32,13 +32,21 @@ function useInvalidate() {
 export function useChat() {
   const invalidate = useInvalidate()
   return useMutation({
-    mutationFn: ({ query, actor }) => api.chat(query, actor),
+    mutationFn: ({ query, actor, lang }) => api.chat(query, actor, lang),
     onSuccess: () => invalidate(keys.audit),
   })
 }
 
 export function useTranslate() {
   return useMutation({ mutationFn: ({ text, target }) => api.translate(text, target) })
+}
+
+export function useExtract() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ docType, file }) => api.extract(docType, file),
+    onSuccess: () => invalidate(keys.audit),
+  })
 }
 
 export function useCreateCase() {
@@ -68,7 +76,7 @@ export function useEscalateCase() {
 export function useDraftDocument() {
   const invalidate = useInvalidate()
   return useMutation({
-    mutationFn: ({ caseId, templateId, actor }) => api.draftDocument(caseId, templateId, actor),
+    mutationFn: ({ caseId, templateId, actor, lang }) => api.draftDocument(caseId, templateId, actor, lang),
     onSuccess: () => invalidate(keys.audit, keys.analytics),
   })
 }

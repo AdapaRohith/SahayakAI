@@ -8,7 +8,7 @@ import { SectionTitle, StatusBadge, Shield } from '../components/ui.jsx'
 const STATUS_LABEL = { draft: 'Draft', approved: 'Approved', issued: 'Issued' }
 
 export default function Officer() {
-  const { role, actor } = useApp()
+  const { role, actor, lang } = useApp()
   const t = useT().officer
   const tRole = useT().nav.roles
   const templatesQ = useTemplates()
@@ -55,7 +55,7 @@ export default function Officer() {
     if (!caseId || templateId == null) return
     setActionError(null)
     try {
-      const doc = await draftMut.mutateAsync({ caseId: Number(caseId), templateId, actor })
+      const doc = await draftMut.mutateAsync({ caseId: Number(caseId), templateId, actor, lang })
       upsertDoc(doc)
       setSelectedId(doc.id)
     } catch (err) {

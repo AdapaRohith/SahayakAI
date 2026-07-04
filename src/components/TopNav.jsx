@@ -68,7 +68,7 @@ export default function TopNav() {
 
   return (
     <header
-      className={`sticky top-0 z-40 relative border-b transition-all duration-500 ease-out ${
+      className={`sticky top-0 z-40 border-b transition-all duration-500 ease-out ${
         scrolled
           ? 'bg-white/70 backdrop-blur-xl border-ink-200 shadow-[0_6px_28px_rgba(0,0,0,0.07)]'
           : 'bg-white/55 backdrop-blur-md border-transparent'

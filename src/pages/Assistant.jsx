@@ -1,10 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { useChat } from '../lib/queries.js'
+import { useChat, useExtract } from '../lib/queries.js'
 import { useSpeech } from '../lib/useSpeech.js'
 import { useT } from '../lib/i18n.js'
 import CitationPanel from '../components/CitationPanel.jsx'
 import { SectionTitle, Shield } from '../components/ui.jsx'
+
+const DOC_TYPES = ['aadhaar', 'income_certificate', 'land_record']
+
+// Human labels for extracted field keys (backend returns snake_case).
+function prettyKey(k) {
+  return k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
 
 // Turn [1],[2] markers (if the backend adds them) into small superscripts.
 function AnswerText({ text }) {
@@ -14,12 +21,18 @@ function AnswerText({ text }) {
 export default function Assistant() {
   const { actor, lang } = useApp()
   const chat = useChat()
+  const extract = useExtract()
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [activeRef, setActiveRef] = useState(null)
   const [panel, setPanel] = useState({ citations: [], usedChunks: [] })
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [docType, setDocType] = useState(DOC_TYPES[0])
+  const [file, setFile] = useState(null)
+  const fileInputRef = useRef(null)
   const t = useT()
   const ta = t.assistant
+  const tu = ta.upload
   const scrollRef = useRef(null)
 
   const { supported, listening, error: micError, start, stop } = useSpeech(lang, (transcript, isFinal) => {
@@ -38,7 +51,7 @@ export default function Assistant() {
     setMessages((m) => [...m, userMsg])
     setInput('')
     try {
-      const res = await chat.mutateAsync({ query: text, actor })
+      const res = await chat.mutateAsync({ query: text, actor, lang })
       const citations = res.citations ?? []
       const usedChunks = res.used_chunks ?? []
       const botMsg = {
@@ -55,6 +68,36 @@ export default function Assistant() {
       setMessages((m) => [
         ...m,
         { id: `e_${Date.now()}`, role: 'assistant', error: true, text: ta.errorReach(err.message), citations: [], usedChunks: [] },
+      ])
+    }
+  }
+
+  async function runExtract() {
+    if (!file || extract.isPending) return
+    const fileName = file.name
+    const chosenType = docType
+    setMessages((m) => [...m, { id: `uf_${Date.now()}`, role: 'user', kind: 'file', text: fileName, docType: chosenType }])
+    setUploadOpen(false)
+    setFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    try {
+      const res = await extract.mutateAsync({ docType: chosenType, file })
+      setMessages((m) => [
+        ...m,
+        {
+          id: `ex_${Date.now()}`,
+          role: 'assistant',
+          kind: 'extract',
+          docType: res.doc_type ?? chosenType,
+          fileName: res.source_file ?? fileName,
+          fields: res.fields ?? {},
+          engine: res.engine,
+        },
+      ])
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        { id: `exe_${Date.now()}`, role: 'assistant', error: true, text: tu.error(err.message), citations: [], usedChunks: [] },
       ])
     }
   }
@@ -86,8 +129,46 @@ export default function Assistant() {
             {messages.map((m) =>
               m.role === 'user' ? (
                 <div key={m.id} className="flex justify-end animate-fadeUp">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent-700 text-white px-4 py-2.5 text-[15px]">
-                    {m.text}
+                  {m.kind === 'file' ? (
+                    <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent-700 text-white px-4 py-2.5 flex items-center gap-2.5">
+                      <PaperclipIcon />
+                      <span className="min-w-0">
+                        <span className="block text-[14px] font-semibold truncate">{m.text}</span>
+                        <span className="block text-[11px] text-white/80">{tu.types[m.docType] || m.docType}</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent-700 text-white px-4 py-2.5 text-[15px]">
+                      {m.text}
+                    </div>
+                  )}
+                </div>
+              ) : m.kind === 'extract' ? (
+                <div key={m.id} className="flex justify-start animate-fadeUp">
+                  <div className="max-w-[92%] rounded-2xl rounded-bl-sm px-4 py-3 border bg-white border-ink-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded bg-ink-900 text-white">
+                        <Shield className="h-3 w-3" />
+                      </span>
+                      <span className="text-xs font-bold text-ink-900">{ta.botName}</span>
+                      <span className="chip bg-approved-bg text-approved">{tu.types[m.docType] || m.docType}</span>
+                    </div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-ink-500 mb-1.5">{tu.resultTitle}</div>
+                    {Object.keys(m.fields).length === 0 ? (
+                      <p className="text-sm text-ink-500">—</p>
+                    ) : (
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                        {Object.entries(m.fields).map(([k, v]) => (
+                          <div key={k} className="contents">
+                            <dt className="text-xs text-ink-500">{prettyKey(k)}</dt>
+                            <dd className="text-sm font-semibold text-ink-900 break-words">{String(v)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                    {m.engine && (
+                      <div className="mt-2.5 pt-2 border-t border-ink-100 text-[11px] text-ink-500">{tu.engine(m.engine)}</div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -142,11 +223,11 @@ export default function Assistant() {
               ),
             )}
 
-            {chat.isPending && (
+            {(chat.isPending || extract.isPending) && (
               <div className="flex justify-start animate-fadeUp">
                 <div className="rounded-2xl rounded-bl-sm bg-white border border-ink-200 px-4 py-3 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-accent-600 animate-pulseDot" />
-                  <span className="text-sm text-ink-500">{ta.retrieving}</span>
+                  <span className="text-sm text-ink-500">{extract.isPending ? tu.extracting : ta.retrieving}</span>
                 </div>
               </div>
             )}
@@ -167,14 +248,66 @@ export default function Assistant() {
             ))}
           </div>
 
+          {/* Upload tray — pick a document type and file, then extract fields */}
+          {uploadOpen && (
+            <div className="border-t border-ink-100 px-3 py-3 bg-ink-50 animate-fadeUp">
+              <div className="flex items-center gap-2 mb-2">
+                <PaperclipIcon className="h-4 w-4 text-accent-700" />
+                <span className="text-sm font-semibold text-ink-900">{tu.title}</span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[180px_1fr_auto] items-end">
+                <div>
+                  <label className="field-label">{tu.docTypeLabel}</label>
+                  <select
+                    value={docType}
+                    onChange={(e) => setDocType(e.target.value)}
+                    className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+                  >
+                    {DOC_TYPES.map((d) => (
+                      <option key={d} value={d}>{tu.types[d]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">{tu.choose}</label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    className="w-full text-sm text-ink-700 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-900 file:px-3 file:py-2 file:text-white file:text-sm file:font-semibold hover:file:bg-ink-800"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setUploadOpen(false); setFile(null) }} className="btn-ghost h-[38px]">{tu.cancel}</button>
+                  <button onClick={runExtract} disabled={!file || extract.isPending} className="btn-teal h-[38px]">
+                    {extract.isPending ? tu.extracting : tu.extract}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-ink-500 mt-2">{tu.hint}</p>
+            </div>
+          )}
+
           {/* Composer */}
           <div className="p-3">
             <div className="flex items-end gap-2">
               <button
+                onClick={() => setUploadOpen((v) => !v)}
+                title={tu.attach}
+                aria-label={tu.attach}
+                aria-pressed={uploadOpen}
+                className={`btn h-11 w-11 shrink-0 rounded-xl p-0 border ${
+                  uploadOpen ? 'bg-accent-700 text-white border-accent-700' : 'bg-white text-ink-700 border-ink-300 hover:border-accent-600 hover:text-accent-800'
+                }`}
+              >
+                <PaperclipIcon />
+              </button>
+              <button
                 onClick={listening ? stop : start}
                 disabled={!supported}
-                title={supported ? 'Voice input' : 'Voice input not supported in this browser'}
-                aria-label={listening ? 'Stop voice input' : 'Start voice input'}
+                title={supported ? ta.voiceInput : ta.voiceNotSupported}
+                aria-label={listening ? ta.voiceStop : ta.voiceStart}
                 className={`btn relative h-11 w-11 shrink-0 rounded-xl p-0 overflow-visible ${
                   listening ? 'bg-accent-800 text-white' : 'bg-accent-700 text-white hover:bg-accent-800'
                 } disabled:bg-ink-300`}
@@ -236,6 +369,14 @@ function MicIcon() {
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="9" y="3" width="6" height="11" rx="3" />
       <path d="M5 11a7 7 0 0014 0M12 18v3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PaperclipIcon({ className = 'h-5 w-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8.5-8.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
