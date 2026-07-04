@@ -74,6 +74,25 @@ export const api = {
   escalateCase: (id, actor, reason) => post(`/cases/${id}/escalate`, { actor, reason }),
   getWorkflows: () => get('/workflows'),
 
+  // Multi-department workflow: departments, their queues, routes and routing.
+  // Case responses now also carry route_id / current_department_id /
+  // current_department_name / current_stage_order.
+  getDepartments: () => get('/departments'),
+  getDepartment: (id) => get(`/departments/${id}`),
+  getDepartmentQueue: (id) => get(`/departments/${id}/queue`),
+  // Queue items advance the underlying case; complete auto-advances to the next dept.
+  startQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/start`, {}),
+  completeQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/complete`, {}),
+
+  getRoutes: () => get('/routes'),
+  getRoute: (id) => get(`/routes/${id}`),
+  createRoute: (body) => post('/routes', body),
+
+  // Case routing across departments.
+  assignRoute: (id, route_id, actor) => post(`/cases/${id}/assign-route`, { route_id, actor }),
+  routeNextCase: (id) => post(`/cases/${id}/route-next`, {}),
+  createRoutedCase: (body) => post('/cases/routed', body),
+
   // Documents lifecycle: draft → approve → issue
   getTemplates: () => get('/templates'),
   draftDocument: (case_id, template_id, actor, lang) => post('/documents/draft', { case_id, template_id, actor, lang }),

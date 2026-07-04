@@ -13,6 +13,9 @@ export const keys = {
   audit: ['audit'],
   analytics: ['analytics'],
   schemes: ['schemes'],
+  departments: ['departments'],
+  routes: ['routes'],
+  deptQueue: (id) => ['deptQueue', id],
 }
 
 // ---- Queries ----
@@ -22,6 +25,17 @@ export const useWorkflows = () => useQuery({ queryKey: keys.workflows, queryFn: 
 export const useAudit = () => useQuery({ queryKey: keys.audit, queryFn: api.getAudit })
 export const useAnalytics = () => useQuery({ queryKey: keys.analytics, queryFn: api.getAnalytics })
 export const useSchemes = () => useQuery({ queryKey: keys.schemes, queryFn: api.getSchemes })
+
+// Multi-department workflow reads. Queues poll so pending/overdue counts stay fresh.
+export const useDepartments = () => useQuery({ queryKey: keys.departments, queryFn: api.getDepartments })
+export const useRoutes = () => useQuery({ queryKey: keys.routes, queryFn: api.getRoutes })
+export const useDeptQueue = (id, enabled = true) =>
+  useQuery({
+    queryKey: keys.deptQueue(id),
+    queryFn: () => api.getDepartmentQueue(id),
+    enabled: enabled && id != null,
+    refetchInterval: 15_000,
+  })
 
 // ---- Mutations ----
 function useInvalidate() {
@@ -70,6 +84,51 @@ export function useEscalateCase() {
   return useMutation({
     mutationFn: ({ id, actor, reason }) => api.escalateCase(id, actor, reason),
     onSuccess: () => invalidate(keys.cases, keys.audit, keys.analytics),
+  })
+}
+
+// ---- Multi-department routing mutations ----
+// A completed queue item auto-advances its case, so these refresh cases,
+// every department queue (prefix key ['deptQueue']), audit and analytics.
+const ROUTING_KEYS = [keys.cases, keys.departments, ['deptQueue'], keys.audit, keys.analytics]
+
+export function useStartQueueItem() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ deptId, queueId }) => api.startQueueItem(deptId, queueId),
+    onSuccess: () => invalidate(...ROUTING_KEYS),
+  })
+}
+
+export function useCompleteQueueItem() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ deptId, queueId }) => api.completeQueueItem(deptId, queueId),
+    onSuccess: () => invalidate(...ROUTING_KEYS),
+  })
+}
+
+export function useAssignRoute() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ id, routeId, actor }) => api.assignRoute(id, routeId, actor),
+    onSuccess: () => invalidate(...ROUTING_KEYS),
+  })
+}
+
+export function useRouteNext() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ id }) => api.routeNextCase(id),
+    onSuccess: () => invalidate(...ROUTING_KEYS),
+  })
+}
+
+export function useCreateRoutedCase() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (body) => api.createRoutedCase(body),
+    onSuccess: () => invalidate(...ROUTING_KEYS),
   })
 }
 
