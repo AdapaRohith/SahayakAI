@@ -304,6 +304,7 @@ export default function Assistant() {
                 <PaperclipIcon />
               </button>
               <button
+                data-guide="mic"
                 onClick={listening ? stop : start}
                 disabled={!supported}
                 title={supported ? ta.voiceInput : ta.voiceNotSupported}
@@ -348,7 +349,7 @@ export default function Assistant() {
         </div>
 
         {/* Citation side panel */}
-        <div className="lg:sticky lg:top-24 h-fit">
+        <div data-guide="sources" className="lg:sticky lg:top-24 h-fit">
           <CitationPanel
             citations={panel.citations}
             usedChunks={panel.usedChunks}
