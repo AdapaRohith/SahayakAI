@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav, { ROLE_ROUTES } from './components/TopNav.jsx'
+import SahayakGuide from './components/SahayakGuide.jsx'
 import { useApp } from './store/AppContext.jsx'
 import { useT } from './lib/i18n.js'
 
@@ -81,6 +82,8 @@ function AuthedShell() {
           </span>
         </div>
       </footer>
+      {/* Additive voice-guided walkthrough overlay (does not alter any screen). */}
+      <SahayakGuide />
     </div>
   )
 }
