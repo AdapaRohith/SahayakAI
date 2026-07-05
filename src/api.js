@@ -1,10 +1,6 @@
 // ---------------------------------------------------------------------------
 // GovAssist AI backend client. BASE already includes `/api`
 // (e.g. https://mrdu.avlokai.com/api). Override with VITE_API_URL.
-//
-// Every non-2xx throws an ApiError carrying `.status`, so callers can branch on
-// an expected 409 (draft→approve→issue guard, advance-past-final) and surface it
-// inline instead of crashing.
 // ---------------------------------------------------------------------------
 
 const BASE = import.meta.env.VITE_API_URL ?? 'https://mrdu.avlokai.com/api'
@@ -40,7 +36,6 @@ const get = (path) => req(path)
 const post = (path, body) => req(path, { method: 'POST', body: JSON.stringify(body) })
 const put = (path, body) => req(path, { method: 'PUT', body: JSON.stringify(body) })
 
-// Multipart upload — do NOT set Content-Type; the browser adds the boundary.
 async function upload(path, formData) {
   let res
   try {
@@ -59,16 +54,17 @@ async function upload(path, formData) {
 export const API_BASE = BASE
 
 export const api = {
-  // Chat & RAG. `lang` (en|hi|te) asks the backend to answer in the
-  // user's selected language so the whole experience — not just the UI
-  // chrome — follows the language switcher.
+  // Chat & RAG
   chat: (query, actor, lang) => post('/chat', { query, actor, lang }),
   classify: (query, actor, lang) => post('/classify', { query, actor, lang }),
   translate: (text, target) => post('/translate', { text, target }),
 
-  // AI Voice Guide — backend decides the spoken reply + which on-screen element
-  // to highlight. Returns { reply, action: 'highlight'|'none', target }.
+  // AI Voice Guide
   guide: (context, transcript, lang) => post('/guide', { context, transcript, language: lang }),
+
+  // Session (backend-persisted conversation memory)
+  getSession: () => get('/session'),
+  resetSession: () => post('/session/reset', {}),
 
   // Cases + workflow
   getCases: () => get('/cases'),
@@ -78,13 +74,10 @@ export const api = {
   escalateCase: (id, actor, reason) => post(`/cases/${id}/escalate`, { actor, reason }),
   getWorkflows: () => get('/workflows'),
 
-  // Multi-department workflow: departments, their queues, routes and routing.
-  // Case responses now also carry route_id / current_department_id /
-  // current_department_name / current_stage_order.
+  // Departments & multi-dept routing
   getDepartments: () => get('/departments'),
   getDepartment: (id) => get(`/departments/${id}`),
   getDepartmentQueue: (id) => get(`/departments/${id}/queue`),
-  // Queue items advance the underlying case; complete auto-advances to the next dept.
   startQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/start`, {}),
   completeQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/complete`, {}),
 
@@ -92,25 +85,19 @@ export const api = {
   getRoute: (id) => get(`/routes/${id}`),
   createRoute: (body) => post('/routes', body),
 
-  // Case routing across departments.
   assignRoute: (id, route_id, actor) => post(`/cases/${id}/assign-route`, { route_id, actor }),
   routeNextCase: (id) => post(`/cases/${id}/route-next`, {}),
   createRoutedCase: (body) => post('/cases/routed', body),
 
-  // Documents lifecycle: draft → approve → issue
+  // Document lifecycle
   getTemplates: () => get('/templates'),
-  // `language` (hi|te|bn|…) drives language-aware drafting; backend auto-detects
-  // when omitted. `lang` kept for backward-compatible servers.
-  draftDocument: (case_id, template_id, actor, lang) => post('/documents/draft', { case_id, template_id, actor, lang, language: lang }),
+  draftDocument: (case_id, template_id, actor, lang) => post('/documents/draft', { case_id, template_id, actor, lang }),
   autofill: (case_id, template_id, fields, actor, lang) => post('/autofill', { case_id, template_id, fields, actor, language: lang }),
   saveDocument: (id, content) => put(`/documents/${id}`, { content }),
   approveDocument: (id, actor) => post(`/documents/${id}/approve`, { actor }),
   issueDocument: (id, actor) => post(`/documents/${id}/issue`, { actor }),
 
-  // Certified PDF render of a document (GET /documents/{id}/pdf).
-  // `documentPdfUrl` is the raw endpoint (direct download link). `fetchDocumentPdf`
-  // pulls it as a Blob so the UI can build an object URL — that renders inline in an
-  // <iframe> even though the endpoint sends `Content-Disposition: attachment`.
+  // PDF
   documentPdfUrl: (id) => `${BASE}/documents/${id}/pdf`,
   fetchDocumentPdf: async (id) => {
     let res
@@ -126,7 +113,7 @@ export const api = {
     return res.blob()
   },
 
-  // Document upload → OCR field extraction (multipart/form-data)
+  // Document upload / extraction
   extract: (docType, file) => {
     const fd = new FormData()
     fd.append('doc_type', docType)
@@ -141,21 +128,4 @@ export const api = {
   // Audit + analytics
   getAudit: () => get('/audit'),
   getAnalytics: () => get('/analytics/summary'),
-
-  // Multi-department workflow (departments, queues, routes, case routing).
-  // These share the same API base — point VITE_API_URL at the backend that
-  // serves them (e.g. http://localhost:8002/api).
-  getDepartments: () => get('/departments'),
-  getDepartment: (id) => get(`/departments/${id}`),
-  getDepartmentQueue: (id) => get(`/departments/${id}/queue`),
-  startQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/start`, {}),
-  completeQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/complete`, {}),
-
-  getRoutes: () => get('/routes'),
-  getRoute: (id) => get(`/routes/${id}`),
-  createRoute: (body) => post('/routes', body),
-
-  assignRoute: (id, route_id, actor) => post(`/cases/${id}/assign-route`, { route_id, actor }),
-  routeNext: (id) => post(`/cases/${id}/route-next`, {}),
-  createRoutedCase: (body) => post('/cases/routed', body),
 }

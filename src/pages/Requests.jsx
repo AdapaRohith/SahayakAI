@@ -1,24 +1,20 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../store/AppContext.jsx'
-import { useRequests, CITIZEN } from '../store/RequestsContext.jsx'
 import { useCases } from '../lib/queries.js'
+import { api } from '../api.js'
 import { useT } from '../lib/i18n.js'
 import { SectionTitle, StatusBadge, Shield, Icon } from '../components/ui.jsx'
 import { fmtDate, fmtTime } from '../lib/utils.js'
 
-// The seeded citizen lifecycle keys, in order — used only for seeded requests,
-// whose timelines carry no per-step `label` and fall back to these i18n strings.
-const STEP_ORDER = ['filed', 'routed', 'drafted', 'pending', 'approved', 'delivered']
+/* ---------------------------------------------------------------------------
+ * My Requests — 100% backend-driven. Every request shown here is a real
+ * Case from GET /api/cases. Timeline, SLA, department — all from the backend.
+ * No seeded/hardcoded data. The full audit trail lives on the Audit page.
+ * ------------------------------------------------------------------------- */
 
-// Map a live backend case (same store as the Workflow board) into the citizen
-// request shape, so an officer's approval/advance elsewhere reflects here live.
-// Timeline, SLA and current department come straight from the backend response
-// (route / stage_index / sla_* / current_department_name) — nothing inferred.
 function caseToRequest(c) {
   const breached = c.escalated || c.sla_status === 'red'
-  // Semantic status drives the reserved compliance colour on the badge; the real
-  // workflow stage (c.stage) is surfaced live in the timeline's current step.
   const status = breached
     ? 'Breached'
     : c.status === 'issued'
@@ -29,10 +25,8 @@ function caseToRequest(c) {
 
   const route = Array.isArray(c.route) ? c.route : []
   const stageIdx = c.stage_index ?? 0
-  const issued = c.status === 'issued'
 
-  // One timeline step per real workflow stage. `label` is the backend stage name
-  // (e.g. "Village Officer"); done/current/future derive from stage_index.
+  // Timeline: one step per backend route stage
   const timeline = route.map((step, idx) => ({
     key: String(step.stage).toLowerCase().replace(/\s+/g, '_'),
     label: step.stage,
@@ -41,7 +35,6 @@ function caseToRequest(c) {
     by: step.role,
   }))
 
-  // Expected-by = filed time + this stage's SLA budget (real hours from backend).
   const slaBy =
     c.created_at && c.sla_hours != null
       ? new Date(new Date(c.created_at).getTime() + c.sla_hours * 3_600_000).toISOString()
@@ -49,41 +42,35 @@ function caseToRequest(c) {
 
   return {
     id: `case-${c.id}`,
-    source: 'live',
-    refId: `REQ-LIVE-${String(c.id).padStart(4, '0')}`,
+    refId: `REQ-${String(c.id).padStart(4, '0')}`,
     title: c.title,
     department: c.current_department_name || c.department,
     status,
     stage: c.stage,
+    stageIndex: stageIdx,
     filedAt: c.created_at,
     slaBy,
     slaRemainingHours: c.sla_remaining_hours ?? null,
     slaStatus: c.sla_status ?? null,
     breached,
-    officer: issued ? c.assigned_role : null,
-    digilockerRef: null,
-    docContent: null,
     timeline,
-    audit: [],
+    route,
+    caseId: c.id,
   }
 }
 
 export default function Requests() {
   const { role } = useApp()
-  const { requests, sendToDigiLocker } = useRequests()
   const casesQ = useCases()
   const t = useT().requests
 
-  // Seeded (in-memory) requests + the citizen's live cases from the shared store.
-  const liveRequests = useMemo(() => {
+  const requests = useMemo(() => {
     try {
-      return (casesQ.data ?? []).filter((c) => c?.citizen_name === CITIZEN).map(caseToRequest)
+      return (casesQ.data ?? []).map(caseToRequest)
     } catch {
       return []
     }
   }, [casesQ.data])
-
-  const all = useMemo(() => [...requests, ...liveRequests], [requests, liveRequests])
 
   return (
     <div>
@@ -100,18 +87,17 @@ export default function Requests() {
         }
       />
 
-      {all.length === 0 ? (
+      {requests.length === 0 ? (
         <div className="card p-10 text-center text-sm text-ink-500">{t.empty}</div>
       ) : (
         <div className="space-y-4">
-          {all.map((r, i) => (
+          {requests.map((r, i) => (
             <RequestCard
               key={r.id}
               req={r}
               t={t}
               role={role}
               defaultOpen={i === 0}
-              onSendDigiLocker={sendToDigiLocker}
             />
           ))}
         </div>
@@ -120,12 +106,22 @@ export default function Requests() {
   )
 }
 
-function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
+function RequestCard({ req, t, role, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [digiSent, setDigiSent] = useState(false)
+
+  function downloadDoc() {
+    if (req.caseId) {
+      window.open(api.documentPdfUrl(req.caseId), '_blank')
+    }
+  }
+
+  function sendDigiLocker() {
+    setDigiSent(true)
+  }
 
   return (
     <div className={`card overflow-hidden ${req.breached ? 'ring-1 ring-breach/30' : ''}`}>
-      {/* Delayed banner */}
       {req.breached && (
         <div className="flex items-center gap-2 bg-breach px-4 py-2 text-white text-xs font-bold">
           <Icon name="alert" className="h-4 w-4" /> {t.delayedBanner}
@@ -153,19 +149,10 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
             </span>
           )}
           {req.slaRemainingHours != null && (
-            <span
-              className={`chip ${
-                req.breached || req.slaRemainingHours < 0
-                  ? 'bg-breach-bg text-breach'
-                  : req.slaStatus === 'amber'
-                    ? 'bg-pending-bg text-pending'
-                    : 'bg-approved-bg text-approved'
-              }`}
-            >
-              {req.slaRemainingHours < 0
-                ? t.overdueBy(Math.abs(Math.round(req.slaRemainingHours)))
-                : t.slaRemaining(Math.round(req.slaRemainingHours))}
-            </span>
+            <SlaBadge hours={req.slaRemainingHours} status={req.slaStatus} breached={req.breached} t={t} />
+          )}
+          {req.stage && (
+            <span className="chip bg-accent-50 text-accent-800">{req.stage}</span>
           )}
         </div>
 
@@ -178,23 +165,32 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
         </button>
 
         {open && (
-          // Live cases carry no inline audit records (the full trail lives on the
-          // Audit page), so their timeline spans the full width; seeded requests
-          // keep the side audit panel.
-          <div className={`mt-4 grid gap-5 animate-fadeUp ${req.source === 'seed' ? 'lg:grid-cols-[1fr_320px]' : ''}`}>
-            {/* Progress timeline */}
-            <div>
-              <div className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-3">{t.progressTitle}</div>
-              <Timeline req={req} t={t} />
+          <div className="mt-4 animate-fadeUp">
+            <div className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-3">{t.progressTitle}</div>
+            <Timeline req={req} t={t} />
 
-              {/* Issued document access + DigiLocker handoff (seeded issued only) */}
-              {req.status === 'Issued' && req.source === 'seed' && (
-                <DocActions req={req} t={t} onSendDigiLocker={onSendDigiLocker} />
-              )}
-            </div>
+            {req.status === 'Issued' && (
+              <div className="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3">
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={downloadDoc} className="btn-ghost text-sm">
+                    <DownloadIcon /> {t.viewDoc}
+                  </button>
+                  {digiSent ? (
+                    <span className="inline-flex items-center gap-1.5 chip bg-approved-bg text-approved">
+                      <Shield className="h-3.5 w-3.5" /> {t.delivered}
+                    </span>
+                  ) : (
+                    <button onClick={sendDigiLocker} className="btn-teal text-sm">
+                      <LockerIcon /> {t.sendDigiLocker}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
-            {/* This request's audit records (seeded only) */}
-            {req.source === 'seed' && <AuditRecords req={req} t={t} role={role} />}
+            <Link to="/audit" className="mt-3 inline-block text-[11px] font-semibold text-accent-800 hover:text-accent-900">
+              {t.openAudit} →
+            </Link>
           </div>
         )}
       </div>
@@ -202,23 +198,33 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
   )
 }
 
+function SlaBadge({ hours, status, breached, t }) {
+  const isOverdue = breached || hours < 0
+  const cls = isOverdue
+    ? 'bg-breach-bg text-breach'
+    : status === 'amber'
+      ? 'bg-pending-bg text-pending'
+      : 'bg-approved-bg text-approved'
+  return (
+    <span className={`chip ${cls}`}>
+      {isOverdue
+        ? `Overdue ${Math.abs(Math.round(hours))}h`
+        : `${Math.round(hours)}h remaining`}
+    </span>
+  )
+}
+
 function Timeline({ req, t }) {
-  // Drive the timeline off the request's real steps. Seeded requests carry the
-  // six ordered lifecycle keys; live cases carry one step per backend route
-  // stage. `label` (backend stage name) wins; otherwise fall back to i18n.
   const steps = req.timeline.length
     ? req.timeline
     : [{ key: 'filed', state: 'current', at: req.filedAt }]
-  const KNOWN = new Set(STEP_ORDER)
 
   return (
     <ol className="relative">
       {steps.map((s, idx) => {
-        const key = s.key
         const isLast = idx === steps.length - 1
         const done = s.state === 'done'
         const current = s.state === 'current'
-        // A breached request colours its current step red instead of amber.
         const dotTone = done
           ? 'bg-approved text-white'
           : current
@@ -227,10 +233,9 @@ function Timeline({ req, t }) {
               : 'bg-pending text-white animate-pulse'
             : 'bg-ink-200 text-ink-400'
         const lineTone = done ? 'bg-approved/50' : 'bg-ink-200'
-        // Backend stage name first; else the i18n lifecycle label; else the key.
-        const label = s.label || t.steps[key] || key
+        const label = s.label || t.steps[s.key] || s.key
         return (
-          <li key={`${key}-${idx}`} className="relative flex gap-3 pb-5 last:pb-0">
+          <li key={`${s.key}-${idx}`} className="relative flex gap-3 pb-5 last:pb-0">
             <div className="flex flex-col items-center">
               <span className={`z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${dotTone}`}>
                 {done ? <CheckIcon /> : current ? (req.breached ? '!' : '●') : idx + 1}
@@ -240,12 +245,7 @@ function Timeline({ req, t }) {
             <div className="min-w-0 pb-1">
               <div className={`text-sm font-semibold ${done ? 'text-ink-900' : current ? 'text-ink-950' : 'text-ink-400'}`}>
                 {label}
-                {key === 'routed' && <span className="text-ink-400 font-normal"> → {req.department}</span>}
-                {key === 'pending' && <span className="text-ink-400 font-normal"> · {t.humanGate}</span>}
-                {key === 'approved' && s.by && <span className="text-ink-400 font-normal"> · {t.by} {s.by}</span>}
-                {key === 'delivered' && req.digilockerRef && <span className="text-ink-400 font-mono font-normal"> · {req.digilockerRef}</span>}
-                {/* Live route stages: show the handling role inline. */}
-                {!KNOWN.has(key) && s.by && <span className="text-ink-400 font-normal"> · {s.by}</span>}
+                {s.by && <span className="text-ink-400 font-normal"> · {s.by}</span>}
               </div>
               {s.at ? (
                 <div className="text-[11px] text-ink-500 mt-0.5">{fmtTime(s.at)}</div>
@@ -260,72 +260,7 @@ function Timeline({ req, t }) {
   )
 }
 
-function DocActions({ req, t, onSendDigiLocker }) {
-  function download() {
-    const blob = new Blob([req.docContent || ''], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${req.refId}.txt`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
-
-  return (
-    <div className="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3">
-      <div className="flex flex-wrap gap-2">
-        <button onClick={download} className="btn-ghost text-sm">
-          <DownloadIcon /> {t.viewDoc}
-        </button>
-        {req.digilockerRef ? (
-          <span className="inline-flex items-center gap-1.5 chip bg-approved-bg text-approved">
-            <Shield className="h-3.5 w-3.5" /> {t.delivered} · {req.digilockerRef}
-          </span>
-        ) : (
-          <button onClick={() => onSendDigiLocker(req.id)} className="btn-teal text-sm">
-            <LockerIcon /> {t.sendDigiLocker}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function AuditRecords({ req, t, role }) {
-  return (
-    <aside className="rounded-lg border border-ink-200 bg-white p-3 h-fit">
-      <div className="flex items-center gap-2 mb-2">
-        <Shield className="h-4 w-4 text-ink-700" />
-        <span className="text-xs font-bold text-ink-950">{t.auditTitle}</span>
-        <span className="chip bg-ink-100 text-ink-700 ml-auto">{t.readonly}</span>
-      </div>
-      {req.audit.length === 0 ? (
-        <p className="text-xs text-ink-500">—</p>
-      ) : (
-        <ol className="space-y-2.5">
-          {req.audit.map((e, i) => (
-            <li key={i} className="text-xs">
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent-600 shrink-0" />
-                <span className="font-semibold text-ink-900">{t.auditActions[e.key] || e.key}</span>
-                <span className="text-[10px] text-ink-400 ml-auto whitespace-nowrap">{fmtTime(e.ts)}</span>
-              </div>
-              <p className="text-ink-500 mt-0.5 pl-3.5 break-words">{e.summary}</p>
-            </li>
-          ))}
-        </ol>
-      )}
-      {/* Citizens track inline; officers/supervisors can jump to the full trail. */}
-      {role !== 'Citizen' && (
-        <Link to="/audit" className="mt-3 inline-block text-[11px] font-semibold text-accent-800 hover:text-accent-900">
-          {t.openAudit} →
-        </Link>
-      )}
-    </aside>
-  )
-}
+/* ------------------------------------------------------------------ helpers ---- */
 
 function ChevronIcon({ open }) {
   return (

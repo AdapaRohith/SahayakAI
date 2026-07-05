@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useApp } from '../store/AppContext.jsx'
-import { useChat, useExtract, useTemplates, useAutofill } from '../lib/queries.js'
+import { useChat, useExtract, useTemplates, useAutofill, useTranslate } from '../lib/queries.js'
 import { useSpeech } from '../lib/useSpeech.js'
 import { useT } from '../lib/i18n.js'
 import { api } from '../api.js'
@@ -135,6 +135,8 @@ export default function Assistant() {
   const [docType, setDocType] = useState(DOC_TYPES[0])
   const [file, setFile] = useState(null)
   const fileInputRef = useRef(null)
+  const [translatedMsgs, setTranslatedMsgs] = useState({})  // msgId → translatedText
+  const translate = useTranslate()
   const t = useT()
   const ta = t.assistant
   const tu = ta.upload
@@ -261,11 +263,19 @@ export default function Assistant() {
     }
   }
 
-  // Empty = show a centered, minimal chatbar; once a message exists the view
-  // expands to the full-screen conversation. `submit` adds the user message
-  // first, so this flips on first send and the enter animation plays.
-  const hasStarted = messages.length > 0
+  // Translate the last bot message to a target language via backend
+  async function translateMessage(msg, targetLang) {
+    if (translatedMsgs[msg.id] || translate.isPending) return
+    try {
+      const res = await translate.mutateAsync({ text: msg.text, target: targetLang })
+      setTranslatedMsgs((prev) => ({ ...prev, [msg.id]: res.translated }))
+    } catch {
+      // silently fail — show original text
+    }
+  }
 
+  const hasStarted = messages.length > 0
+  // expands to the full-screen conversation.
   // Quick-prompt chips shown above the composer in the full-screen layout.
   const quickPrompts = (
     <div className="border-t border-white/40 px-3 pt-2.5 flex flex-wrap items-center gap-2">
@@ -538,7 +548,27 @@ export default function Assistant() {
                       )}
                     </div>
 
-                    <AnswerText text={m.text} />
+                    <AnswerText text={translatedMsgs[m.id] || m.text} />
+
+                    {/* Translate toggle — show translation in user's selected language */}
+                    {!m.error && m.text && (
+                      <div className="mt-2 flex items-center gap-1.5">
+                        {['hi', 'te', 'en'].filter((l) => l !== lang).map((tl) => (
+                          <button
+                            key={tl}
+                            onClick={() => translateMessage(m, tl)}
+                            disabled={translate.isPending || !!translatedMsgs[m.id]}
+                            className={`chip text-[11px] transition-colors ${
+                              translatedMsgs[m.id]
+                                ? 'bg-approved-bg text-approved'
+                                : 'bg-ink-100 text-ink-600 hover:bg-accent-50 hover:text-accent-800'
+                            }`}
+                          >
+                            {translatedMsgs[m.id] ? '✓ Translated' : tl === 'hi' ? 'हिन्दी' : tl === 'te' ? 'తెలుగు' : 'English'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Inline citation chips (source_ref, title on hover) */}
                     {!m.error && m.citations.length > 0 && (
