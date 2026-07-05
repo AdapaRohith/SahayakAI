@@ -13,6 +13,9 @@ export const keys = {
   audit: ['audit'],
   analytics: ['analytics'],
   schemes: ['schemes'],
+  departments: ['departments'],
+  deptQueue: (id) => ['departments', String(id), 'queue'],
+  routes: ['routes'],
 }
 
 // ---- Queries ----
@@ -22,6 +25,30 @@ export const useWorkflows = () => useQuery({ queryKey: keys.workflows, queryFn: 
 export const useAudit = () => useQuery({ queryKey: keys.audit, queryFn: api.getAudit })
 export const useAnalytics = () => useQuery({ queryKey: keys.analytics, queryFn: api.getAnalytics })
 export const useSchemes = () => useQuery({ queryKey: keys.schemes, queryFn: api.getSchemes })
+
+// ---- Multi-department workflow ----
+export const useDepartments = () => useQuery({ queryKey: keys.departments, queryFn: api.getDepartments })
+export const useDepartmentQueue = (id) =>
+  useQuery({ queryKey: keys.deptQueue(id), queryFn: () => api.getDepartmentQueue(id), enabled: id != null })
+export const useRoutes = () => useQuery({ queryKey: keys.routes, queryFn: api.getRoutes })
+
+export function useStartQueueItem() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ deptId, queueId }) => api.startQueueItem(deptId, queueId),
+    onSuccess: (_data, { deptId }) => invalidate(keys.deptQueue(deptId), keys.departments, keys.cases, keys.audit),
+  })
+}
+
+export function useCompleteQueueItem() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ deptId, queueId }) => api.completeQueueItem(deptId, queueId),
+    // Completing auto-advances the case to the next department, so refresh
+    // every department queue plus cases + audit.
+    onSuccess: () => invalidate(keys.departments, keys.cases, keys.audit),
+  })
+}
 
 // ---- Mutations ----
 function useInvalidate() {

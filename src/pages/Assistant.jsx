@@ -115,7 +115,7 @@ export default function Assistant() {
         <div className="card flex flex-col h-[70vh] min-h-[520px] overflow-hidden">
           <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-slim p-4 space-y-4">
             {messages.length === 0 && !chat.isPending && (
-              <div className="h-full flex flex-col items-center justify-center text-center px-6 animate-fadeUp">
+              <div className="h-full flex flex-col items-center justify-center text-center px-6 animate-fadeUp rounded-xl bg-gradient-to-br from-indigo-100/70 via-purple-50 to-rose-100/60">
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600 text-white mb-4 shadow-sm">
                   <Shield className="h-7 w-7" />
                 </span>
@@ -349,7 +349,16 @@ export default function Assistant() {
         </div>
 
         {/* Citation side panel */}
-        <div data-guide="sources" className="lg:sticky lg:top-24 h-fit">
+        <div data-guide="sources" className="lg:sticky lg:top-28 h-fit">
+          {/* Hero illustration — matches the reference design */}
+          <div className="card overflow-hidden mb-4 hidden lg:block">
+            <img
+              src="/hero-illustration.png"
+              alt=""
+              aria-hidden="true"
+              className="w-full h-auto object-cover"
+            />
+          </div>
           <CitationPanel
             citations={panel.citations}
             usedChunks={panel.usedChunks}

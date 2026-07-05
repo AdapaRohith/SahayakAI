@@ -96,4 +96,21 @@ export const api = {
   // Audit + analytics
   getAudit: () => get('/audit'),
   getAnalytics: () => get('/analytics/summary'),
+
+  // Multi-department workflow (departments, queues, routes, case routing).
+  // These share the same API base — point VITE_API_URL at the backend that
+  // serves them (e.g. http://localhost:8002/api).
+  getDepartments: () => get('/departments'),
+  getDepartment: (id) => get(`/departments/${id}`),
+  getDepartmentQueue: (id) => get(`/departments/${id}/queue`),
+  startQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/start`, {}),
+  completeQueueItem: (deptId, queueId) => post(`/departments/${deptId}/queue/${queueId}/complete`, {}),
+
+  getRoutes: () => get('/routes'),
+  getRoute: (id) => get(`/routes/${id}`),
+  createRoute: (body) => post('/routes', body),
+
+  assignRoute: (id, route_id, actor) => post(`/cases/${id}/assign-route`, { route_id, actor }),
+  routeNext: (id) => post(`/cases/${id}/route-next`, {}),
+  createRoutedCase: (body) => post('/cases/routed', body),
 }
