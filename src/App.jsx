@@ -1,12 +1,14 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TopNav, { ROLE_ROUTES } from './components/TopNav.jsx'
-import SahayakGuide from './components/SahayakGuide.jsx'
+import GuideButton from './components/GuideButton.jsx'
 import { useApp } from './store/AppContext.jsx'
 import { useT } from './lib/i18n.js'
 
 const Login = lazy(() => import('./pages/Login.jsx'))
 const Assistant = lazy(() => import('./pages/Assistant.jsx'))
+const Requests = lazy(() => import('./pages/Requests.jsx'))
+const Departments = lazy(() => import('./pages/Departments.jsx'))
 const Officer = lazy(() => import('./pages/Officer.jsx'))
 const Workflow = lazy(() => import('./pages/Workflow.jsx'))
 const Audit = lazy(() => import('./pages/Audit.jsx'))
@@ -65,8 +67,10 @@ function AuthedShell() {
         <Routes>
           <Route path="/" element={<Navigate to="/assistant" replace />} />
           <Route path="/assistant" element={<Guard path="/assistant"><Assistant /></Guard>} />
+          <Route path="/requests" element={<Guard path="/requests"><Requests /></Guard>} />
           <Route path="/officer" element={<Guard path="/officer"><Officer /></Guard>} />
           <Route path="/workflow" element={<Guard path="/workflow"><Workflow /></Guard>} />
+          <Route path="/departments" element={<Guard path="/departments"><Departments /></Guard>} />
           <Route path="/audit" element={<Guard path="/audit"><Audit /></Guard>} />
           <Route path="/admin" element={<Guard path="/admin"><Admin /></Guard>} />
           <Route path="*" element={<Navigate to="/assistant" replace />} />
@@ -82,8 +86,8 @@ function AuthedShell() {
           </span>
         </div>
       </footer>
-      {/* Additive voice-guided walkthrough overlay (does not alter any screen). */}
-      <SahayakGuide />
+      {/* Floating AI Voice Guide (button + popup; does not alter any screen). */}
+      <GuideButton />
     </div>
   )
 }

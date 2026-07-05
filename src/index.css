@@ -65,6 +65,10 @@
   }
 }
 
+/* Scrollable region with no visible scrollbar (top-nav link rows). */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Thin, unobtrusive scrollbars for panels */
 .scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll-slim::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 8px; }

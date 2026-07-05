@@ -36,6 +36,8 @@ export const useDeptQueue = (id, enabled = true) =>
     enabled: enabled && id != null,
     refetchInterval: 15_000,
   })
+// Alias kept for consumers that import the longer name.
+export const useDepartmentQueue = useDeptQueue
 
 // ---- Mutations ----
 function useInvalidate() {

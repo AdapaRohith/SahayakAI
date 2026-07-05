@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useApp } from '../store/AppContext.jsx'
 import { useChat, useExtract, useTemplates, useAutofill } from '../lib/queries.js'
 import { useSpeech } from '../lib/useSpeech.js'
@@ -60,9 +62,62 @@ function rejectionDetail(err) {
   return err.body || err.message
 }
 
-// Turn [1],[2] markers (if the backend adds them) into small superscripts.
+// Persist chat history in localStorage so a refresh keeps the conversation.
+const CHAT_STORAGE_KEY = 'sahayak_chat_messages'
+
+function loadMessages() {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+// Tailwind-styled element overrides so markdown from the AI renders cleanly.
+// react-markdown escapes raw HTML by default, so this is XSS-safe.
+const MD_COMPONENTS = {
+  p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+  ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+  ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+  li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+  strong: ({ node, ...props }) => <strong className="font-semibold text-ink-950" {...props} />,
+  em: ({ node, ...props }) => <em className="italic" {...props} />,
+  h1: ({ node, ...props }) => <h1 className="text-base font-bold text-ink-950 mb-1.5" {...props} />,
+  h2: ({ node, ...props }) => <h2 className="text-[15px] font-bold text-ink-950 mb-1.5" {...props} />,
+  h3: ({ node, ...props }) => <h3 className="text-sm font-bold text-ink-950 mb-1" {...props} />,
+  a: ({ node, ...props }) => (
+    <a className="text-accent-700 underline hover:text-accent-800" target="_blank" rel="noreferrer" {...props} />
+  ),
+  code: ({ node, inline, ...props }) =>
+    inline ? (
+      <code className="rounded bg-ink-100 px-1 py-0.5 text-[13px] font-mono text-ink-900" {...props} />
+    ) : (
+      <code className="block rounded-lg bg-ink-900 text-ink-50 p-3 text-[13px] font-mono overflow-x-auto" {...props} />
+    ),
+  pre: ({ node, ...props }) => <pre className="mb-2 last:mb-0" {...props} />,
+  blockquote: ({ node, ...props }) => (
+    <blockquote className="border-l-2 border-accent-300 pl-3 italic text-ink-600 mb-2" {...props} />
+  ),
+  table: ({ node, ...props }) => (
+    <div className="overflow-x-auto mb-2">
+      <table className="w-full text-sm border-collapse" {...props} />
+    </div>
+  ),
+  th: ({ node, ...props }) => <th className="border border-ink-200 px-2 py-1 bg-ink-50 text-left font-semibold" {...props} />,
+  td: ({ node, ...props }) => <td className="border border-ink-200 px-2 py-1" {...props} />,
+}
+
+// Render the AI answer as markdown so formatting (lists, bold, tables, code) shows.
 function AnswerText({ text }) {
-  return <p className="text-[15px] leading-relaxed text-ink-900 whitespace-pre-wrap">{text}</p>
+  return (
+    <div className="text-[15px] leading-relaxed text-ink-900">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 export default function Assistant() {
@@ -73,7 +128,7 @@ export default function Assistant() {
   const autofill = useAutofill()
   const [genId, setGenId] = useState(null) // extract-message id currently generating a doc
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState(loadMessages)
   const [activeRef, setActiveRef] = useState(null)
   const [panel, setPanel] = useState({ citations: [], usedChunks: [] })
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -94,6 +149,15 @@ export default function Assistant() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, chat.isPending])
+
+  // Persist history on every change so a page refresh restores the conversation.
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages))
+    } catch {
+      /* quota exceeded (e.g. large inline PDFs) — skip persisting this update */
+    }
+  }, [messages])
 
   async function submit(raw) {
     const text = (raw ?? input).trim()
@@ -210,7 +274,7 @@ export default function Assistant() {
         <div className="card flex flex-col h-[70vh] min-h-[520px] overflow-hidden">
           <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-slim p-4 space-y-4">
             {messages.length === 0 && !chat.isPending && (
-              <div className="h-full flex flex-col items-center justify-center text-center px-6 animate-fadeUp">
+              <div className="h-full flex flex-col items-center justify-center text-center px-6 animate-fadeUp rounded-xl bg-gradient-to-br from-indigo-100/70 via-purple-50 to-rose-100/60">
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600 text-white mb-4 shadow-sm">
                   <Shield className="h-7 w-7" />
                 </span>
@@ -467,7 +531,16 @@ export default function Assistant() {
         </div>
 
         {/* Citation side panel */}
-        <div data-guide="sources" className="lg:sticky lg:top-24 h-fit">
+        <div data-guide="sources" className="lg:sticky lg:top-28 h-fit">
+          {/* Hero illustration — matches the reference design */}
+          <div className="card overflow-hidden mb-4 hidden lg:block">
+            <img
+              src="/hero-illustration.png"
+              alt=""
+              aria-hidden="true"
+              className="w-full h-auto object-cover"
+            />
+          </div>
           <CitationPanel
             citations={panel.citations}
             usedChunks={panel.usedChunks}
