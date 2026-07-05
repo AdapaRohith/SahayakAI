@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 
 // Loaded on demand so Driver.js stays out of the initial bundle.
 const VoiceAssistant = lazy(() => import('./VoiceAssistant.jsx'))
@@ -12,24 +13,47 @@ const VoiceAssistant = lazy(() => import('./VoiceAssistant.jsx'))
 
 export default function GuideButton() {
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false) // load the popup lazily on first open, then keep mounted so exit can animate
+  const reduce = useReducedMotion()
+
+  function toggle() {
+    setMounted(true)
+    setOpen((v) => !v)
+  }
+
+  // Reduced motion → fade only, no scale/rise, no hover/tap spring.
+  const btnMotion = reduce
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        transition: { duration: 0.2 },
+      }
+    : {
+        initial: { opacity: 0, y: 24, scale: 0.9 },
+        animate: { opacity: 1, y: 0, scale: 1 },
+        transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.15 },
+        whileHover: { scale: 1.04 },
+        whileTap: { scale: 0.96 },
+      }
 
   return (
     <>
-      <button
+      <motion.button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-label="Open AI Voice Guide"
         aria-expanded={open}
+        {...btnMotion}
         style={{ boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}
-        className="fixed bottom-6 right-6 z-[97] inline-flex h-[52px] items-center gap-2 rounded-full bg-accent-700 px-5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-accent-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-accent-600"
+        className="fixed bottom-6 right-6 z-[97] inline-flex h-[52px] items-center gap-2 rounded-full bg-accent-700 px-5 text-[15px] font-semibold text-white hover:bg-accent-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-accent-600"
       >
         <HeadsetIcon />
         <span>Guide Me</span>
-      </button>
+      </motion.button>
 
-      {open && (
+      {mounted && (
         <Suspense fallback={null}>
-          <VoiceAssistant onClose={() => setOpen(false)} />
+          <VoiceAssistant open={open} onClose={() => setOpen(false)} />
         </Suspense>
       )}
     </>

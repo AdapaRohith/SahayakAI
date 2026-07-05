@@ -8,7 +8,7 @@ import {
   useAssignRoute, useRouteNext, useCreateRoutedCase,
 } from '../lib/queries.js'
 import { useT } from '../lib/i18n.js'
-import { SectionTitle, StatusBadge, Stat } from '../components/ui.jsx'
+import { SectionTitle, StatusBadge, Stat, Icon } from '../components/ui.jsx'
 import { fmtDate } from '../lib/utils.js'
 
 // Kanban columns derived from backend case status + escalation flag.
@@ -334,7 +334,7 @@ function CaseCard({ c, t, now, fetchedAt, supervisor, routes = [], onAdvance, on
           >
             <option value="">{routingBusy ? t.assigning : t.selectRoute}</option>
             {routes.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}{r.is_default ? ' ★' : ''}</option>
+              <option key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</option>
             ))}
           </select>
         ) : (
@@ -402,10 +402,10 @@ function LedgerRow({ dept, index, t }) {
         <span className="font-semibold text-sm text-ink-900 truncate">{dept.name}</span>
         <span className="flex-1 border-b border-dashed border-ink-300 mx-1 -translate-y-0.5 min-w-[1.5rem]" />
         {inProgress > 0 && (
-          <span className="chip bg-pending-bg text-pending">▸ {inProgress}</span>
+          <span className="chip bg-pending-bg text-pending"><Icon name="play" className="h-2.5 w-2.5" /> {inProgress}</span>
         )}
         {overdue > 0 && (
-          <span className="chip bg-breach-bg text-breach">⚠ {overdue}</span>
+          <span className="chip bg-breach-bg text-breach"><Icon name="alert" className="h-3 w-3" /> {overdue}</span>
         )}
         <span className="font-mono font-bold text-sm text-ink-950 tabular-nums w-7 text-right">{String(pending).padStart(2, '0')}</span>
         {queueQ.isFetching && <span className="h-1.5 w-1.5 rounded-full bg-accent-600 animate-pulseDot" />}

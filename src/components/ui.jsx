@@ -100,6 +100,38 @@ export function Shield({ className = 'h-4 w-4' }) {
 }
 
 // ---------------------------------------------------------------------------
+// Line-icon set — one consistent visual language (24-grid, 2px stroke, rounded
+// joins) that replaces ad-hoc emoji glyphs across pages. Emoji render
+// inconsistently per-OS and can't be themed; these inherit currentColor.
+// ---------------------------------------------------------------------------
+const ICON_PATHS = {
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" /></>,
+  briefcase: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M3 12h18" /></>,
+  shield: <><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" /><path d="M9 12l2 2 4-4" /></>,
+  chat: <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z" />,
+  tag: <><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 4 12.8V6a2 2 0 0 1 2-2h6.8a2 2 0 0 1 1.4.6l6.4 6.4a2 2 0 0 1 0 2.4z" /><circle cx="7.5" cy="7.5" r="1.2" /></>,
+  file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 17h6" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="M8.5 12l2.5 2.5 4.5-5" /></>,
+  send: <><path d="M22 2 11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></>,
+  clipboard: <><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2" /><path d="M9 14l2 2 4-4" /></>,
+  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></>,
+  pencil: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
+  arrow: <><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></>,
+  alert: <><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></>,
+  play: <path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none" />,
+}
+
+export function Icon({ name, className = 'h-4 w-4' }) {
+  const path = ICON_PATHS[name] || ICON_PATHS.chat
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {path}
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Motion helpers
 // ---------------------------------------------------------------------------
 

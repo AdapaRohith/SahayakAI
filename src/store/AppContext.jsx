@@ -70,6 +70,24 @@ export function AppProvider({ children }) {
     }
   }, [])
 
+  // Demo / fallback sign-in: accept any name/email without a Google JWT.
+  // Used by the email+password form and the non-Google social buttons.
+  const loginLocal = useCallback((profile = {}) => {
+    const p = {
+      name: profile.name || (profile.email ? profile.email.split('@')[0] : 'User'),
+      email: profile.email || '',
+      picture: profile.picture || '',
+      sub: profile.sub || 'local',
+    }
+    setUser(p)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
+    } catch {
+      /* ignore */
+    }
+    return p
+  }, [])
+
   const logout = useCallback(() => {
     setUser(null)
     try {
@@ -84,6 +102,7 @@ export function AppProvider({ children }) {
       user,
       isAuthed: !!user,
       login,
+      loginLocal,
       logout,
       role,
       actor: ACTOR_FOR[role] ?? 'citizen',
@@ -91,7 +110,7 @@ export function AppProvider({ children }) {
       lang,
       setLang,
     }),
-    [user, login, logout, role, lang, setLang],
+    [user, login, loginLocal, logout, role, lang, setLang],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

@@ -1,22 +1,22 @@
 import { useMemo, useState } from 'react'
 import { useAudit } from '../lib/queries.js'
 import { useT } from '../lib/i18n.js'
-import { SectionTitle, Shield } from '../components/ui.jsx'
+import { SectionTitle, Shield, Icon } from '../components/ui.jsx'
 import { fmtTime, shortHash } from '../lib/utils.js'
 
-// Metadata per backend action type: label, colour tone, icon glyph.
+// Metadata per backend action type: label, colour tone, line-icon name.
 const ACTIONS = {
-  chat: { label: 'Chat query', tone: 'teal', glyph: '💬' },
-  classify: { label: 'Intent classified', tone: 'indigo', glyph: '⌗' },
-  draft: { label: 'Document drafted', tone: 'indigo', glyph: '📝' },
-  approve: { label: 'Document approved', tone: 'approved', glyph: '✓' },
-  issue: { label: 'Document issued', tone: 'approved', glyph: '📤' },
-  eligibility: { label: 'Eligibility checked', tone: 'teal', glyph: '⚖' },
-  translate: { label: 'Translated', tone: 'indigo', glyph: '🌐' },
-  extract: { label: 'Fields extracted', tone: 'indigo', glyph: '🔍' },
-  autofill: { label: 'Autofilled', tone: 'indigo', glyph: '✍' },
-  advance: { label: 'Case advanced', tone: 'pending', glyph: '➜' },
-  escalate: { label: 'Case escalated', tone: 'breach', glyph: '▲' },
+  chat: { label: 'Chat query', tone: 'teal', icon: 'chat' },
+  classify: { label: 'Intent classified', tone: 'indigo', icon: 'tag' },
+  draft: { label: 'Document drafted', tone: 'indigo', icon: 'file' },
+  approve: { label: 'Document approved', tone: 'approved', icon: 'check' },
+  issue: { label: 'Document issued', tone: 'approved', icon: 'send' },
+  eligibility: { label: 'Eligibility checked', tone: 'teal', icon: 'clipboard' },
+  translate: { label: 'Translated', tone: 'indigo', icon: 'globe' },
+  extract: { label: 'Fields extracted', tone: 'indigo', icon: 'search' },
+  autofill: { label: 'Autofilled', tone: 'indigo', icon: 'pencil' },
+  advance: { label: 'Case advanced', tone: 'pending', icon: 'arrow' },
+  escalate: { label: 'Case escalated', tone: 'breach', icon: 'alert' },
 }
 
 // Non-status action tones collapse to monochrome; the three compliance
@@ -117,14 +117,14 @@ export default function Audit() {
         )}
         <ol>
           {rows.map((e, i) => {
-            const meta = ACTIONS[e.action] || { label: e.action, tone: 'indigo', glyph: '•' }
+            const meta = ACTIONS[e.action] || { label: e.action, tone: 'indigo', icon: 'tag' }
             const isLast = i === rows.length - 1
             const chain = chained[e.id] || { prevHash: '—', hash: '—' }
             return (
               <li key={e.id} className={`relative flex gap-4 px-5 py-4 hover:bg-ink-50 transition-colors ${isLast ? '' : 'border-b border-ink-100'}`}>
                 <div className="flex flex-col items-center pt-1">
-                  <span className={`z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-sm ${TONE_DOT[meta.tone]}`}>
-                    {meta.glyph}
+                  <span className={`z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white ${TONE_DOT[meta.tone]}`}>
+                    <Icon name={meta.icon} className="h-4 w-4" />
                   </span>
                   {!isLast && (
                     <span aria-hidden title={t.hashLink} className="w-0.5 flex-1 mt-1 rounded bg-gradient-to-b from-ink-400 to-ink-200" />

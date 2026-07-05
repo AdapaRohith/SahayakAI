@@ -4,52 +4,66 @@ import { useApp } from '../store/AppContext.jsx'
 import { useRequests, CITIZEN } from '../store/RequestsContext.jsx'
 import { useCases } from '../lib/queries.js'
 import { useT } from '../lib/i18n.js'
-import { SectionTitle, StatusBadge, Shield } from '../components/ui.jsx'
+import { SectionTitle, StatusBadge, Shield, Icon } from '../components/ui.jsx'
 import { fmtDate, fmtTime } from '../lib/utils.js'
 
-// The six-step citizen lifecycle, in order. Labels come from i18n.
+// The seeded citizen lifecycle keys, in order — used only for seeded requests,
+// whose timelines carry no per-step `label` and fall back to these i18n strings.
 const STEP_ORDER = ['filed', 'routed', 'drafted', 'pending', 'approved', 'delivered']
 
 // Map a live backend case (same store as the Workflow board) into the citizen
 // request shape, so an officer's approval/advance elsewhere reflects here live.
+// Timeline, SLA and current department come straight from the backend response
+// (route / stage_index / sla_* / current_department_name) — nothing inferred.
 function caseToRequest(c) {
-  const status = c.escalated
+  const breached = c.escalated || c.sla_status === 'red'
+  // Semantic status drives the reserved compliance colour on the badge; the real
+  // workflow stage (c.stage) is surfaced live in the timeline's current step.
+  const status = breached
     ? 'Breached'
     : c.status === 'issued'
       ? 'Issued'
       : c.status === 'drafting'
         ? 'Pending Approval'
         : 'In Progress'
-  const filed = c.created_at
+
+  const route = Array.isArray(c.route) ? c.route : []
+  const stageIdx = c.stage_index ?? 0
   const issued = c.status === 'issued'
-  const drafting = c.status === 'drafting'
-  const st = (key, done, current, at = null, by = null) => ({
-    key,
-    state: done ? 'done' : current ? 'current' : 'future',
-    at,
-    by,
-  })
+
+  // One timeline step per real workflow stage. `label` is the backend stage name
+  // (e.g. "Village Officer"); done/current/future derive from stage_index.
+  const timeline = route.map((step, idx) => ({
+    key: String(step.stage).toLowerCase().replace(/\s+/g, '_'),
+    label: step.stage,
+    state: idx < stageIdx ? 'done' : idx === stageIdx ? 'current' : 'future',
+    at: idx <= stageIdx ? c.created_at : null,
+    by: step.role,
+  }))
+
+  // Expected-by = filed time + this stage's SLA budget (real hours from backend).
+  const slaBy =
+    c.created_at && c.sla_hours != null
+      ? new Date(new Date(c.created_at).getTime() + c.sla_hours * 3_600_000).toISOString()
+      : null
+
   return {
     id: `case-${c.id}`,
     source: 'live',
     refId: `REQ-LIVE-${String(c.id).padStart(4, '0')}`,
     title: c.title,
-    department: c.department,
+    department: c.current_department_name || c.department,
     status,
-    filedAt: filed,
-    slaBy: null,
-    breached: c.escalated || c.sla_status === 'red',
+    stage: c.stage,
+    filedAt: c.created_at,
+    slaBy,
+    slaRemainingHours: c.sla_remaining_hours ?? null,
+    slaStatus: c.sla_status ?? null,
+    breached,
     officer: issued ? c.assigned_role : null,
     digilockerRef: null,
     docContent: null,
-    timeline: [
-      st('filed', true, false, filed),
-      st('routed', true, false, filed),
-      st('drafted', drafting || issued, c.status === 'open', drafting || issued ? filed : null),
-      st('pending', issued, drafting, null),
-      st('approved', issued, false, issued ? filed : null, issued ? c.assigned_role : null),
-      st('delivered', false, false),
-    ],
+    timeline,
     audit: [],
   }
 }
@@ -114,7 +128,7 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
       {/* Delayed banner */}
       {req.breached && (
         <div className="flex items-center gap-2 bg-breach px-4 py-2 text-white text-xs font-bold">
-          <span>▲</span> {t.delayedBanner}
+          <Icon name="alert" className="h-4 w-4" /> {t.delayedBanner}
         </div>
       )}
 
@@ -138,6 +152,21 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
               {t.expectedLabel}: <span className="font-semibold">{fmtDate(req.slaBy)}</span>
             </span>
           )}
+          {req.slaRemainingHours != null && (
+            <span
+              className={`chip ${
+                req.breached || req.slaRemainingHours < 0
+                  ? 'bg-breach-bg text-breach'
+                  : req.slaStatus === 'amber'
+                    ? 'bg-pending-bg text-pending'
+                    : 'bg-approved-bg text-approved'
+              }`}
+            >
+              {req.slaRemainingHours < 0
+                ? t.overdueBy(Math.abs(Math.round(req.slaRemainingHours)))
+                : t.slaRemaining(Math.round(req.slaRemainingHours))}
+            </span>
+          )}
         </div>
 
         <button
@@ -149,7 +178,10 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
         </button>
 
         {open && (
-          <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_320px] animate-fadeUp">
+          // Live cases carry no inline audit records (the full trail lives on the
+          // Audit page), so their timeline spans the full width; seeded requests
+          // keep the side audit panel.
+          <div className={`mt-4 grid gap-5 animate-fadeUp ${req.source === 'seed' ? 'lg:grid-cols-[1fr_320px]' : ''}`}>
             {/* Progress timeline */}
             <div>
               <div className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-3">{t.progressTitle}</div>
@@ -161,8 +193,8 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
               )}
             </div>
 
-            {/* This request's audit records */}
-            <AuditRecords req={req} t={t} role={role} />
+            {/* This request's audit records (seeded only) */}
+            {req.source === 'seed' && <AuditRecords req={req} t={t} role={role} />}
           </div>
         )}
       </div>
@@ -171,11 +203,19 @@ function RequestCard({ req, t, role, defaultOpen, onSendDigiLocker }) {
 }
 
 function Timeline({ req, t }) {
+  // Drive the timeline off the request's real steps. Seeded requests carry the
+  // six ordered lifecycle keys; live cases carry one step per backend route
+  // stage. `label` (backend stage name) wins; otherwise fall back to i18n.
+  const steps = req.timeline.length
+    ? req.timeline
+    : [{ key: 'filed', state: 'current', at: req.filedAt }]
+  const KNOWN = new Set(STEP_ORDER)
+
   return (
     <ol className="relative">
-      {STEP_ORDER.map((key, idx) => {
-        const s = req.timeline.find((x) => x.key === key) || { key, state: 'future' }
-        const isLast = idx === STEP_ORDER.length - 1
+      {steps.map((s, idx) => {
+        const key = s.key
+        const isLast = idx === steps.length - 1
         const done = s.state === 'done'
         const current = s.state === 'current'
         // A breached request colours its current step red instead of amber.
@@ -187,8 +227,10 @@ function Timeline({ req, t }) {
               : 'bg-pending text-white animate-pulse'
             : 'bg-ink-200 text-ink-400'
         const lineTone = done ? 'bg-approved/50' : 'bg-ink-200'
+        // Backend stage name first; else the i18n lifecycle label; else the key.
+        const label = s.label || t.steps[key] || key
         return (
-          <li key={key} className="relative flex gap-3 pb-5 last:pb-0">
+          <li key={`${key}-${idx}`} className="relative flex gap-3 pb-5 last:pb-0">
             <div className="flex flex-col items-center">
               <span className={`z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${dotTone}`}>
                 {done ? <CheckIcon /> : current ? (req.breached ? '!' : '●') : idx + 1}
@@ -197,11 +239,13 @@ function Timeline({ req, t }) {
             </div>
             <div className="min-w-0 pb-1">
               <div className={`text-sm font-semibold ${done ? 'text-ink-900' : current ? 'text-ink-950' : 'text-ink-400'}`}>
-                {t.steps[key]}
+                {label}
                 {key === 'routed' && <span className="text-ink-400 font-normal"> → {req.department}</span>}
                 {key === 'pending' && <span className="text-ink-400 font-normal"> · {t.humanGate}</span>}
                 {key === 'approved' && s.by && <span className="text-ink-400 font-normal"> · {t.by} {s.by}</span>}
                 {key === 'delivered' && req.digilockerRef && <span className="text-ink-400 font-mono font-normal"> · {req.digilockerRef}</span>}
+                {/* Live route stages: show the handling role inline. */}
+                {!KNOWN.has(key) && s.by && <span className="text-ink-400 font-normal"> · {s.by}</span>}
               </div>
               {s.at ? (
                 <div className="text-[11px] text-ink-500 mt-0.5">{fmtTime(s.at)}</div>

@@ -7,12 +7,12 @@ import { useApp } from '../store/AppContext.jsx'
 import { useAnalytics, useCases, useAudit } from '../lib/queries.js'
 import { useT } from '../lib/i18n.js'
 import { ROLE_ROUTES } from '../components/TopNav.jsx'
-import { SectionTitle, Stat } from '../components/ui.jsx'
+import { SectionTitle, Stat, Icon } from '../components/ui.jsx'
 
 const ROLES = [
-  { id: 'Citizen', icon: '👤' },
-  { id: 'Officer', icon: '🧑‍💼' },
-  { id: 'Supervisor', icon: '🛡️' },
+  { id: 'Citizen', icon: 'user' },
+  { id: 'Officer', icon: 'briefcase' },
+  { id: 'Supervisor', icon: 'shield' },
 ]
 
 // --- Theme tokens for the charts -------------------------------------------
@@ -111,7 +111,9 @@ export default function Admin() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-2xl">{r.icon}</span>
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${active ? 'bg-accent-600 text-white' : 'bg-ink-100 text-ink-600'}`}>
+                    <Icon name={r.icon} className="h-5 w-5" />
+                  </span>
                   {active && <span className="chip bg-ink-950 text-white">{t.active}</span>}
                 </div>
                 <div className="font-bold text-ink-950 mt-2">{tRole[r.id]}</div>

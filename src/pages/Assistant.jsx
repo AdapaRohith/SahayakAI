@@ -409,11 +409,8 @@ export default function Assistant() {
       {!hasStarted ? (
         /* Centered, minimal welcome — chatbar in the middle of the screen. */
         <div className="min-h-[calc(100vh-220px)] flex flex-col items-center justify-center text-center animate-fadeUp">
-          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-600 text-white mb-5 shadow-lift">
-            <Shield className="h-8 w-8" />
-          </span>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink-950">{ta.emptyTitle}</h1>
-          <p className="mt-3 text-ink-500 max-w-md">{ta.emptySub}</p>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-ink-950">{ta.emptyTitle}</h1>
+          <p className="mt-3 text-ink-600 font-medium max-w-md">{ta.emptySub}</p>
 
           <div className="glass-strong mt-8 w-full max-w-2xl rounded-2xl overflow-hidden">
             {uploadTray}

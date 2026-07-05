@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { useApp } from '../store/AppContext.jsx'
@@ -40,7 +41,8 @@ function highlightElement(el, description) {
   d.highlight({ element: el, popover: description ? { description } : undefined })
 }
 
-export default function VoiceAssistant({ onClose }) {
+export default function VoiceAssistant({ open, onClose }) {
+  const reduce = useReducedMotion()
   const { lang: appLang } = useApp()
   const [language, setLanguage] = useState(LANGUAGES.some((l) => l.id === appLang) ? appLang : 'en')
   const [phase, setPhase] = useState('ready') // ready | listening | processing | speaking | error
@@ -102,10 +104,28 @@ export default function VoiceAssistant({ onClose }) {
     })
   }
 
+  const panelMotion = reduce
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.15 },
+      }
+    : {
+        initial: { opacity: 0, y: 12, scale: 0.96 },
+        animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+        exit: { opacity: 0, y: 12, scale: 0.96, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } },
+      }
+
   return (
-    <div
+    <AnimatePresence>
+      {open && (
+    <motion.div
+      key="voice-guide"
       role="dialog"
       aria-label="AI Voice Guide"
+      style={{ transformOrigin: 'bottom right' }}
+      {...panelMotion}
       className="fixed bottom-[88px] right-6 z-[98] w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-ink-200 bg-white shadow-[0_12px_40px_rgba(2,6,23,0.18)]"
     >
       {/* Header */}
@@ -165,7 +185,9 @@ export default function VoiceAssistant({ onClose }) {
           <span className={phase === 'error' ? 'text-center leading-snug' : ''}>{statusText}</span>
         </div>
       </div>
-    </div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

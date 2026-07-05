@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import TopNav, { ROLE_ROUTES } from './components/TopNav.jsx'
 import GuideButton from './components/GuideButton.jsx'
 import { useApp } from './store/AppContext.jsx'
@@ -21,7 +22,7 @@ function PageFallback() {
 // Auth gate toggle. Kept OFF during testing so we don't sign in on every reload.
 // Flip VITE_REQUIRE_AUTH=true (or set the default below to true) to re-enable
 // the Google login gate before shipping. All login code stays wired.
-const REQUIRE_AUTH = import.meta.env.VITE_REQUIRE_AUTH === 'true'
+const REQUIRE_AUTH = import.meta.env.VITE_REQUIRE_AUTH !== 'false'
 
 // Blocks a route the current role is not permitted to see (visible RBAC).
 function Guard({ path, children }) {
@@ -55,27 +56,62 @@ function AuthedShell() {
   const { isAuthed } = useApp()
   const t = useT()
   const location = useLocation()
+  const reduce = useReducedMotion()
 
   if (REQUIRE_AUTH && !isAuthed) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
+  // Morphic page transition — subtle rise + fade + micro-scale on enter,
+  // reverse (and quicker) on exit. Collapses to a plain fade when the user
+  // prefers reduced motion.
+  const variants = reduce
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1, transition: { duration: 0.2 } },
+        exit: { opacity: 0, transition: { duration: 0.1 } },
+      }
+    : {
+        initial: { opacity: 0, y: 12, scale: 0.99 },
+        animate: {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+        },
+        exit: {
+          opacity: 0,
+          y: -8,
+          scale: 0.99,
+          transition: { duration: 0.2, ease: [0.4, 0, 1, 1] },
+        },
+      }
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
-      <main key={location.pathname} className="flex-1 mx-auto w-full max-w-[1400px] px-4 py-6 animate-slideIn">
-        <Routes>
-          <Route path="/" element={<Navigate to="/assistant" replace />} />
-          <Route path="/assistant" element={<Guard path="/assistant"><Assistant /></Guard>} />
-          <Route path="/requests" element={<Guard path="/requests"><Requests /></Guard>} />
-          <Route path="/officer" element={<Guard path="/officer"><Officer /></Guard>} />
-          <Route path="/workflow" element={<Guard path="/workflow"><Workflow /></Guard>} />
-          <Route path="/departments" element={<Guard path="/departments"><Departments /></Guard>} />
-          <Route path="/audit" element={<Guard path="/audit"><Audit /></Guard>} />
-          <Route path="/admin" element={<Guard path="/admin"><Admin /></Guard>} />
-          <Route path="*" element={<Navigate to="/assistant" replace />} />
-        </Routes>
-      </main>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.main
+          key={location.pathname}
+          variants={variants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          className="flex-1 mx-auto w-full max-w-[1400px] px-4 py-6"
+        >
+          <Routes location={location}>
+            <Route path="/" element={<Navigate to="/assistant" replace />} />
+            <Route path="/assistant" element={<Guard path="/assistant"><Assistant /></Guard>} />
+            <Route path="/requests" element={<Guard path="/requests"><Requests /></Guard>} />
+            <Route path="/officer" element={<Guard path="/officer"><Officer /></Guard>} />
+            <Route path="/workflow" element={<Guard path="/workflow"><Workflow /></Guard>} />
+            <Route path="/departments" element={<Guard path="/departments"><Departments /></Guard>} />
+            <Route path="/audit" element={<Guard path="/audit"><Audit /></Guard>} />
+            <Route path="/admin" element={<Guard path="/admin"><Admin /></Guard>} />
+            <Route path="*" element={<Navigate to="/assistant" replace />} />
+          </Routes>
+        </motion.main>
+      </AnimatePresence>
       <footer className="border-t border-ink-200 bg-white py-4">
         <div className="mx-auto max-w-[1400px] px-4 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-500">
           <span>{t.shell.footerTagline}</span>

@@ -2,7 +2,6 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { googleLogout } from '@react-oauth/google'
 import { useApp } from '../store/AppContext.jsx'
 import { useT, LANGS } from '../lib/i18n.js'
-import { Shield } from './ui.jsx'
 
 // Which modules each role may see. This is the visible half of RBAC —
 // the /admin toggle drives which links render.
@@ -81,17 +80,13 @@ export default function TopNav() {
         <div className="px-4 sm:px-5">
           <div className="flex h-[64px] items-center gap-4">
             {/* Brand */}
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-600 text-white shadow-sm transition-transform duration-200 hover:scale-105">
-                <Shield className="h-5 w-5" />
-              </span>
-              <div className="leading-tight">
-                <div className="font-extrabold tracking-tight text-ink-950">
-                  Sahayak<span className="text-accent-600">AI</span>
-                </div>
-                <div className="text-[9px] uppercase tracking-widest text-ink-400">{t.nav.tagline}</div>
-              </div>
-            </div>
+            <NavLink to="/assistant" className="flex items-center shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600" aria-label="SahayakAI">
+              <img
+                src="/logo-full.png"
+                alt="SahayakAI"
+                className="h-9 w-auto transition-transform duration-200 hover:scale-[1.03]"
+              />
+            </NavLink>
 
             {/* Nav links — minimal text with a sliding accent underline */}
             <nav className="hidden lg:flex items-center gap-0.5 ml-2 overflow-x-auto no-scrollbar">
