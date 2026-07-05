@@ -50,6 +50,17 @@
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
+
+  /* Glassmorphism surfaces — translucent, blurred, hairline light border.
+     Read against the ambient gradient blobs on the assistant page. */
+  .glass {
+    @apply bg-white/60 backdrop-blur-xl border border-white/50;
+    box-shadow: 0 8px 32px rgba(15, 23, 42, 0.1);
+  }
+  .glass-strong {
+    @apply bg-white/75 backdrop-blur-2xl border border-white/60;
+    box-shadow: 0 16px 48px rgba(15, 23, 42, 0.16);
+  }
   .field-label {
     @apply block text-xs font-semibold uppercase tracking-wide text-ink-500 mb-1;
   }

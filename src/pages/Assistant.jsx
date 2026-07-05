@@ -261,18 +261,191 @@ export default function Assistant() {
     }
   }
 
+  // Empty = show a centered, minimal chatbar; once a message exists the view
+  // expands to the full-screen conversation. `submit` adds the user message
+  // first, so this flips on first send and the enter animation plays.
+  const hasStarted = messages.length > 0
+
+  // Quick-prompt chips shown above the composer in the full-screen layout.
+  const quickPrompts = (
+    <div className="border-t border-white/40 px-3 pt-2.5 flex flex-wrap items-center gap-2">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">{ta.tryAsking}</span>
+      {ta.suggestions.map((s) => (
+        <button
+          key={s}
+          onClick={() => submit(s)}
+          disabled={chat.isPending}
+          className="text-xs px-2.5 py-1 rounded-full border border-ink-300 hover:border-accent-500 hover:bg-accent-50 hover:text-accent-800 text-ink-700 transition-colors disabled:opacity-40"
+        >
+          {s.length > 42 ? `${s.slice(0, 42)}…` : s}
+        </button>
+      ))}
+    </div>
+  )
+
+  // Upload tray — pick a document type and file, then extract fields. Shared so
+  // it works from both the centered and full-screen composers.
+  const uploadTray = uploadOpen && (
+    <div className="border-t border-white/40 px-3 py-3 bg-ink-50/60 animate-fadeUp">
+      <div className="flex items-center gap-2 mb-2">
+        <PaperclipIcon className="h-4 w-4 text-accent-700" />
+        <span className="text-sm font-semibold text-ink-900">{tu.title}</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[180px_1fr_auto] items-end">
+        <div>
+          <label className="field-label">{tu.docTypeLabel}</label>
+          <select
+            value={docType}
+            onChange={(e) => setDocType(e.target.value)}
+            className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+          >
+            {DOC_TYPES.map((d) => (
+              <option key={d} value={d}>{tu.types[d]}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="field-label">{tu.choose}</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="w-full text-sm text-ink-700 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-900 file:px-3 file:py-2 file:text-white file:text-sm file:font-semibold hover:file:bg-ink-800"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => { setUploadOpen(false); setFile(null) }} className="btn-ghost h-[38px]">{tu.cancel}</button>
+          <button onClick={runExtract} disabled={!file || extract.isPending} className="btn-teal h-[38px]">
+            {extract.isPending ? tu.extracting : tu.extract}
+          </button>
+        </div>
+      </div>
+      <p className="text-[11px] text-ink-500 mt-2">{tu.hint}</p>
+    </div>
+  )
+
+  // The composer (attach + mic + textarea + send + status line). One instance,
+  // rendered in either layout — all API-wired handlers stay in one place.
+  const composer = (
+    <div className="p-3">
+      <div className="flex items-end gap-2">
+        <button
+          onClick={() => setUploadOpen((v) => !v)}
+          title={tu.attach}
+          aria-label={tu.attach}
+          aria-pressed={uploadOpen}
+          className={`btn h-11 w-11 shrink-0 rounded-xl p-0 border ${
+            uploadOpen ? 'bg-accent-700 text-white border-accent-700' : 'bg-white/70 text-ink-700 border-ink-300 hover:border-accent-600 hover:text-accent-800'
+          }`}
+        >
+          <PaperclipIcon />
+        </button>
+        <button
+          data-guide="mic"
+          onClick={listening ? stop : start}
+          disabled={!supported}
+          title={supported ? ta.voiceInput : ta.voiceNotSupported}
+          aria-label={listening ? ta.voiceStop : ta.voiceStart}
+          className={`btn relative h-11 w-11 shrink-0 rounded-xl p-0 overflow-visible ${
+            listening ? 'bg-accent-800 text-white' : 'bg-accent-700 text-white hover:bg-accent-800'
+          } disabled:bg-ink-300`}
+        >
+          {listening && (
+            <span aria-hidden className="absolute inset-0 rounded-xl bg-accent-600 animate-ring" />
+          )}
+          <span className="relative"><MicIcon /></span>
+        </button>
+        <textarea
+          rows={1}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+          }}
+          placeholder={listening ? ta.listening : ta.placeholder}
+          className="flex-1 resize-none rounded-xl border border-ink-300 bg-white/70 px-3.5 py-2.5 text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors max-h-32"
+        />
+        <button onClick={() => submit()} disabled={chat.isPending} className="btn-primary h-11 rounded-xl">
+          {ta.send}
+        </button>
+      </div>
+      {micError ? (
+        <p className="text-[11px] text-breach mt-1.5 px-1 flex items-center gap-1.5" role="alert">
+          <span>⚠</span> {micError}
+        </p>
+      ) : listening ? (
+        <p className="text-[11px] text-accent-800 mt-1.5 px-1 flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent-600 animate-pulseDot" /> {ta.listenNow}
+        </p>
+      ) : !supported ? (
+        <p className="text-[11px] text-ink-500 mt-1.5 px-1">
+          {ta.voiceUnsupported}
+        </p>
+      ) : null}
+    </div>
+  )
+
   return (
-    <div>
-      <SectionTitle
-        eyebrow={ta.eyebrow}
-        title={ta.title}
-        subtitle={ta.subtitle}
+    <div className="relative">
+      {/* Hero background — India-gate skyline fills only the TOP HALF, fading
+          into the page around the centered chatbar. Always mounted so it can
+          dissolve into a glassy blur when the chat opens (hasStarted). */}
+      <div
+        aria-hidden
+        className={`pointer-events-none fixed inset-x-0 top-0 h-[58vh] -z-10 bg-cover bg-center transition-all duration-[900ms] ease-out [mask-image:linear-gradient(to_bottom,black,black_62%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black,black_62%,transparent)] ${
+          hasStarted ? 'opacity-0 blur-3xl scale-110' : 'opacity-100 blur-0 scale-100'
+        }`}
+        style={{ backgroundImage: 'url(/hero-bg.jpg)' }}
+      />
+      {/* Softening scrim so the glass panel + text stay readable over the photo. */}
+      <div
+        aria-hidden
+        className={`pointer-events-none fixed inset-x-0 top-0 h-[58vh] -z-10 bg-gradient-to-b from-white/40 via-white/30 to-transparent transition-opacity duration-[900ms] ${
+          hasStarted ? 'opacity-0' : 'opacity-100'
+        }`}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-        {/* Chat column */}
-        <div className="card flex flex-col h-[70vh] min-h-[520px] overflow-hidden">
-          <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-slim p-4 space-y-4">
+      {!hasStarted ? (
+        /* Centered, minimal welcome — chatbar in the middle of the screen. */
+        <div className="min-h-[calc(100vh-220px)] flex flex-col items-center justify-center text-center animate-fadeUp">
+          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-600 text-white mb-5 shadow-lift">
+            <Shield className="h-8 w-8" />
+          </span>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-ink-950">{ta.emptyTitle}</h1>
+          <p className="mt-3 text-ink-500 max-w-md">{ta.emptySub}</p>
+
+          <div className="glass-strong mt-8 w-full max-w-2xl rounded-2xl overflow-hidden">
+            {uploadTray}
+            {composer}
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-2xl">
+            {ta.suggestions.map((s) => (
+              <button
+                key={s}
+                onClick={() => submit(s)}
+                disabled={chat.isPending}
+                className="text-xs px-3 py-1.5 rounded-full glass text-ink-700 hover:text-accent-800 transition-colors disabled:opacity-40"
+              >
+                {s.length > 42 ? `${s.slice(0, 42)}…` : s}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Full-screen conversation — smooth expand on first send. */
+        <div className="animate-chatExpand">
+          <SectionTitle
+            eyebrow={ta.eyebrow}
+            title={ta.title}
+            subtitle={ta.subtitle}
+          />
+
+          <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+            {/* Chat column */}
+            <div className="glass flex flex-col h-[calc(100vh-220px)] min-h-[520px] overflow-hidden rounded-2xl">
+              <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-slim p-4 space-y-4">
             {messages.length === 0 && !chat.isPending && (
               <div className="h-full flex flex-col items-center justify-center text-center px-6 animate-fadeUp rounded-xl bg-gradient-to-br from-indigo-100/70 via-purple-50 to-rose-100/60">
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-600 text-white mb-4 shadow-sm">
@@ -415,143 +588,37 @@ export default function Assistant() {
             )}
           </div>
 
-          {/* Quick prompts */}
-          <div className="border-t border-ink-100 px-3 pt-2.5 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">{ta.tryAsking}</span>
-            {ta.suggestions.map((s) => (
-              <button
-                key={s}
-                onClick={() => submit(s)}
-                disabled={chat.isPending}
-                className="text-xs px-2.5 py-1 rounded-full border border-ink-300 hover:border-accent-500 hover:bg-accent-50 hover:text-accent-800 text-ink-700 transition-colors disabled:opacity-40"
-              >
-                {s.length > 42 ? `${s.slice(0, 42)}…` : s}
-              </button>
-            ))}
-          </div>
+              {quickPrompts}
 
-          {/* Upload tray — pick a document type and file, then extract fields */}
-          {uploadOpen && (
-            <div className="border-t border-ink-100 px-3 py-3 bg-ink-50 animate-fadeUp">
-              <div className="flex items-center gap-2 mb-2">
-                <PaperclipIcon className="h-4 w-4 text-accent-700" />
-                <span className="text-sm font-semibold text-ink-900">{tu.title}</span>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-[180px_1fr_auto] items-end">
-                <div>
-                  <label className="field-label">{tu.docTypeLabel}</label>
-                  <select
-                    value={docType}
-                    onChange={(e) => setDocType(e.target.value)}
-                    className="w-full rounded-lg border border-ink-300 px-3 py-2 text-sm bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
-                  >
-                    {DOC_TYPES.map((d) => (
-                      <option key={d} value={d}>{tu.types[d]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label">{tu.choose}</label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    className="w-full text-sm text-ink-700 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-900 file:px-3 file:py-2 file:text-white file:text-sm file:font-semibold hover:file:bg-ink-800"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => { setUploadOpen(false); setFile(null) }} className="btn-ghost h-[38px]">{tu.cancel}</button>
-                  <button onClick={runExtract} disabled={!file || extract.isPending} className="btn-teal h-[38px]">
-                    {extract.isPending ? tu.extracting : tu.extract}
-                  </button>
-                </div>
-              </div>
-              <p className="text-[11px] text-ink-500 mt-2">{tu.hint}</p>
+              {uploadTray}
+
+              {composer}
             </div>
-          )}
 
-          {/* Composer */}
-          <div className="p-3">
-            <div className="flex items-end gap-2">
-              <button
-                onClick={() => setUploadOpen((v) => !v)}
-                title={tu.attach}
-                aria-label={tu.attach}
-                aria-pressed={uploadOpen}
-                className={`btn h-11 w-11 shrink-0 rounded-xl p-0 border ${
-                  uploadOpen ? 'bg-accent-700 text-white border-accent-700' : 'bg-white text-ink-700 border-ink-300 hover:border-accent-600 hover:text-accent-800'
-                }`}
-              >
-                <PaperclipIcon />
-              </button>
-              <button
-                data-guide="mic"
-                onClick={listening ? stop : start}
-                disabled={!supported}
-                title={supported ? ta.voiceInput : ta.voiceNotSupported}
-                aria-label={listening ? ta.voiceStop : ta.voiceStart}
-                className={`btn relative h-11 w-11 shrink-0 rounded-xl p-0 overflow-visible ${
-                  listening ? 'bg-accent-800 text-white' : 'bg-accent-700 text-white hover:bg-accent-800'
-                } disabled:bg-ink-300`}
-              >
-                {listening && (
-                  <span aria-hidden className="absolute inset-0 rounded-xl bg-accent-600 animate-ring" />
-                )}
-                <span className="relative"><MicIcon /></span>
-              </button>
-              <textarea
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
-                }}
-                placeholder={listening ? ta.listening : ta.placeholder}
-                className="flex-1 resize-none rounded-xl border border-ink-300 px-3.5 py-2.5 text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus:border-accent-600 transition-colors max-h-32"
+            {/* Citation side panel */}
+            <div data-guide="sources" className="lg:sticky lg:top-28 h-fit">
+              {/* Hero illustration — matches the reference design */}
+              <div className="glass overflow-hidden mb-4 hidden lg:block rounded-2xl">
+                <img
+                  src="/hero-illustration.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="w-full h-auto object-cover"
+                />
+              </div>
+              <CitationPanel
+                citations={panel.citations}
+                usedChunks={panel.usedChunks}
+                activeRef={activeRef}
+                onSelect={setActiveRef}
               />
-              <button onClick={() => submit()} disabled={chat.isPending} className="btn-primary h-11 rounded-xl">
-                {ta.send}
-              </button>
+              <p className="text-[11px] text-ink-500 mt-3 px-1 leading-relaxed">
+                {ta.citationNote} <span className="font-semibold text-ink-800">{ta.auditTrailLink}</span>.
+              </p>
             </div>
-            {micError ? (
-              <p className="text-[11px] text-breach mt-1.5 px-1 flex items-center gap-1.5" role="alert">
-                <span>⚠</span> {micError}
-              </p>
-            ) : listening ? (
-              <p className="text-[11px] text-accent-800 mt-1.5 px-1 flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent-600 animate-pulseDot" /> {ta.listenNow}
-              </p>
-            ) : !supported ? (
-              <p className="text-[11px] text-ink-500 mt-1.5 px-1">
-                {ta.voiceUnsupported}
-              </p>
-            ) : null}
           </div>
         </div>
-
-        {/* Citation side panel */}
-        <div data-guide="sources" className="lg:sticky lg:top-28 h-fit">
-          {/* Hero illustration — matches the reference design */}
-          <div className="card overflow-hidden mb-4 hidden lg:block">
-            <img
-              src="/hero-illustration.png"
-              alt=""
-              aria-hidden="true"
-              className="w-full h-auto object-cover"
-            />
-          </div>
-          <CitationPanel
-            citations={panel.citations}
-            usedChunks={panel.usedChunks}
-            activeRef={activeRef}
-            onSelect={setActiveRef}
-          />
-          <p className="text-[11px] text-ink-500 mt-3 px-1 leading-relaxed">
-            {ta.citationNote} <span className="font-semibold text-ink-800">{ta.auditTrailLink}</span>.
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

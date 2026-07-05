@@ -50,7 +50,21 @@ export function useSpeechSynthesis() {
       const match =
         voices.find((v) => v.lang === code) ||
         voices.find((v) => (v.lang || '').toLowerCase().startsWith(base))
-      if (match) u.voice = match
+      if (match) {
+        u.voice = match
+      } else if (lang === 'te') {
+        // Most desktop browsers ship no Telugu voice → te-IN produces silence.
+        // Fall back to a Hindi voice: shares enough phonetics to be intelligible
+        // for Telugu text, rather than nothing.
+        const hiVoice =
+          voices.find((v) => v.lang === 'hi-IN') ||
+          voices.find((v) => (v.lang || '').toLowerCase().startsWith('hi'))
+        if (hiVoice) {
+          u.voice = hiVoice
+          u.lang = 'hi-IN'
+        }
+        // else: no Telugu or Hindi voice — let the system default attempt te-IN.
+      }
       u.rate = 0.98
       u.onstart = () => {
         setSpeaking(true)
@@ -61,6 +75,12 @@ export function useSpeechSynthesis() {
         onEnd?.()
       }
       u.onerror = () => {
+        console.warn(
+          '[TTS] Voice unavailable for',
+          u.lang,
+          '— installed voices:',
+          voices.map((v) => v.lang),
+        )
         setSpeaking(false)
         onEnd?.()
       }

@@ -79,6 +79,17 @@ export default {
           '0%': { transform: 'scale(0.9)', opacity: '0.6' },
           '100%': { transform: 'scale(1.8)', opacity: '0' },
         },
+        // Centered chatbar → full-screen conversation transition.
+        chatExpand: {
+          '0%': { opacity: '0', transform: 'translateY(24px) scale(0.98)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        // Slow ambient drift for the background glass blobs.
+        blob: {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '33%': { transform: 'translate(24px, -28px) scale(1.08)' },
+          '66%': { transform: 'translate(-18px, 18px) scale(0.94)' },
+        },
       },
       animation: {
         pulseDot: 'pulseDot 1.4s ease-in-out infinite',
@@ -86,6 +97,8 @@ export default {
         fadeUp: 'fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both',
         shimmer: 'shimmer 1.6s ease-in-out infinite',
         ring: 'ring 1.4s ease-out infinite',
+        chatExpand: 'chatExpand 0.55s cubic-bezier(0.22,1,0.36,1) both',
+        blob: 'blob 16s ease-in-out infinite',
       },
     },
   },

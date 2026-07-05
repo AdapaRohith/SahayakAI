@@ -79,11 +79,6 @@ function AuthedShell() {
       <footer className="border-t border-ink-200 bg-white py-4">
         <div className="mx-auto max-w-[1400px] px-4 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-500">
           <span>{t.shell.footerTagline}</span>
-          <span className="flex items-center gap-2">
-            <span className="chip border border-ink-300 text-ink-700">{t.common.grounded}</span>
-            <span className="chip border border-ink-300 text-ink-700">{t.common.humanApproved}</span>
-            <span className="chip bg-ink-950 text-white">{t.common.immutableAudit}</span>
-          </span>
         </div>
       </footer>
       {/* Floating AI Voice Guide (button + popup; does not alter any screen). */}

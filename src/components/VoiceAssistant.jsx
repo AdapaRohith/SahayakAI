@@ -4,7 +4,7 @@ import 'driver.js/dist/driver.css'
 import { useApp } from '../store/AppContext.jsx'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition.js'
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis.js'
-import { askGuide } from '../services/openai.js'
+import { api } from '../api.js'
 import { getPageContext, resolveTarget } from '../utils/pageContext.js'
 
 // Popup languages, in the order requested.
@@ -56,7 +56,13 @@ export default function VoiceAssistant({ onClose }) {
     setPhase('processing')
     try {
       const context = getPageContext()
-      const instruction = await askGuide({ context, transcript, language })
+      const raw = await api.guide(context, transcript, language)
+      // Normalise the backend payload to the shape the UI expects.
+      const instruction = {
+        reply: typeof raw?.reply === 'string' ? raw.reply : '',
+        action: raw?.action === 'highlight' ? 'highlight' : 'none',
+        target: raw?.target == null ? null : String(raw.target),
+      }
 
       if (instruction.reply) {
         setPhase('speaking')
@@ -70,9 +76,9 @@ export default function VoiceAssistant({ onClose }) {
         if (el) highlightElement(el, instruction.reply)
       }
     } catch (err) {
-      // Surface the real cause in the console for debugging (invalid key,
-      // network/CORS, quota, etc.); users still see the friendly message.
-      console.error('[AI Voice Guide] OpenAI request failed:', err)
+      // Surface the real cause in the console for debugging (network/CORS,
+      // backend error, etc.); users still see the friendly message.
+      console.error('[AI Voice Guide] backend /guide request failed:', err)
       setPhase('error')
       setErrorMsg(ERROR_TEXT.openai)
     }

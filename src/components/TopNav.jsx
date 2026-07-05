@@ -40,39 +40,63 @@ export default function TopNav() {
     navigate('/login', { replace: true })
   }
 
-  const navLinkClass = ({ isActive }) =>
-    `px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
-      isActive ? 'bg-teal-500 text-white shadow-sm' : 'text-white/80 hover:text-white hover:bg-white/10'
-    }`
+  // Minimal link: plain ink text + a thin accent underline that slides in on the
+  // active tab (scale-x). Keeps the selected state clear via colour + weight +
+  // indicator (not colour alone) while staying calm and un-pill-y.
+  const NavItem = ({ to, label }) => (
+    <NavLink
+      to={to}
+      className="group relative px-3.5 py-2 text-sm font-semibold whitespace-nowrap rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600"
+    >
+      {({ isActive }) => (
+        <>
+          <span
+            className={`transition-colors duration-200 ${
+              isActive ? 'text-ink-950' : 'text-ink-500 group-hover:text-ink-800'
+            }`}
+          >
+            {label}
+          </span>
+          {/* Animated underline indicator */}
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute left-3.5 right-3.5 -bottom-0.5 h-[2px] rounded-full bg-accent-600 origin-center transition-all duration-300 ease-out ${
+              isActive
+                ? 'scale-x-100 opacity-100'
+                : 'scale-x-0 opacity-0 group-hover:scale-x-50 group-hover:opacity-40'
+            }`}
+          />
+        </>
+      )}
+    </NavLink>
+  )
 
   return (
-    // Floating rounded bar — the page background stays visible around it.
-    <div className="sticky top-0 z-40 bg-ink-50 px-3 sm:px-4 pt-3 pb-2">
+    // Floating glass bar — content scrolls beneath so the blur reads.
+    <div className="sticky top-0 z-40 px-3 sm:px-4 pt-3 pb-2">
       <header
         data-guide="nav"
-        className="mx-auto max-w-[1640px] rounded-2xl bg-indigo-950 text-white shadow-[0_10px_30px_rgba(2,6,23,0.25)]"
+        className="glass mx-auto max-w-[1640px] rounded-2xl text-ink-900"
       >
         <div className="px-4 sm:px-5">
-          <div className="flex h-[68px] items-center gap-4">
+          <div className="flex h-[64px] items-center gap-4">
             {/* Brand */}
             <div className="flex items-center gap-2.5 shrink-0">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-sm">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-600 text-white shadow-sm transition-transform duration-200 hover:scale-105">
                 <Shield className="h-5 w-5" />
               </span>
               <div className="leading-tight">
-                <div className="font-extrabold tracking-tight text-white">
-                  Sahayak<span className="text-teal-400">AI</span>
+                <div className="font-extrabold tracking-tight text-ink-950">
+                  Sahayak<span className="text-accent-600">AI</span>
                 </div>
-                <div className="text-[9px] uppercase tracking-widest text-white/50">{t.nav.tagline}</div>
+                <div className="text-[9px] uppercase tracking-widest text-ink-400">{t.nav.tagline}</div>
               </div>
             </div>
 
-            {/* Nav links — directly on the bar, teal pill marks the active tab */}
-            <nav className="hidden lg:flex items-center gap-1 ml-2 overflow-x-auto no-scrollbar">
+            {/* Nav links — minimal text with a sliding accent underline */}
+            <nav className="hidden lg:flex items-center gap-0.5 ml-2 overflow-x-auto no-scrollbar">
               {links.map((n) => (
-                <NavLink key={n.to} to={n.to} className={navLinkClass}>
-                  {t.nav[n.key]}
-                </NavLink>
+                <NavItem key={n.to} to={n.to} label={t.nav[n.key]} />
               ))}
             </nav>
 
@@ -83,7 +107,7 @@ export default function TopNav() {
                   value={lang}
                   onChange={(e) => setLang(e.target.value)}
                   aria-label={t.nav.language}
-                  className="appearance-none rounded-xl bg-white/10 ring-1 ring-white/15 text-white text-sm font-semibold pl-3.5 pr-8 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 cursor-pointer hover:bg-white/15 transition-colors"
+                  className="appearance-none rounded-xl bg-ink-900/5 ring-1 ring-ink-900/10 text-ink-800 text-sm font-semibold pl-3.5 pr-8 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 cursor-pointer hover:bg-ink-900/10 transition-colors"
                 >
                   {LANGS.map((l) => (
                     <option key={l.id} value={l.id} className="text-ink-900">{l.native}</option>
@@ -98,7 +122,7 @@ export default function TopNav() {
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   aria-label={t.nav.role}
-                  className="appearance-none rounded-xl bg-white/10 ring-1 ring-white/15 text-white text-sm font-semibold pl-3.5 pr-8 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 cursor-pointer hover:bg-white/15 transition-colors"
+                  className="appearance-none rounded-xl bg-ink-900/5 ring-1 ring-ink-900/10 text-ink-800 text-sm font-semibold pl-3.5 pr-8 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 cursor-pointer hover:bg-ink-900/10 transition-colors"
                 >
                   {ROLES.map((r) => (
                     <option key={r} value={r} className="text-ink-900">{t.nav.roles[r]}</option>
@@ -115,22 +139,22 @@ export default function TopNav() {
                       src={user.picture}
                       alt=""
                       referrerPolicy="no-referrer"
-                      className="h-9 w-9 rounded-full border border-white/25 object-cover"
+                      className="h-9 w-9 rounded-full border border-ink-900/15 object-cover"
                     />
                   ) : (
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500 text-white text-sm font-bold">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-600 text-white text-sm font-bold">
                       {(user.name || '?').charAt(0).toUpperCase()}
                     </span>
                   )}
                   <div className="hidden sm:block leading-tight max-w-[150px]">
-                    <div className="text-sm font-bold text-white truncate">{user.name}</div>
-                    <div className="text-[10px] text-white/50 truncate">{user.email}</div>
+                    <div className="text-sm font-bold text-ink-950 truncate">{user.name}</div>
+                    <div className="text-[10px] text-ink-400 truncate">{user.email}</div>
                   </div>
                   <button
                     onClick={handleLogout}
                     title={t.nav.signOut}
                     aria-label={t.nav.signOut}
-                    className="rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 transition-colors"
+                    className="rounded-full p-1.5 text-ink-500 hover:bg-ink-900/10 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 transition-colors"
                   >
                     <LogoutIcon />
                   </button>
@@ -140,11 +164,9 @@ export default function TopNav() {
           </div>
 
           {/* Compact nav — scrolls horizontally below the brand row */}
-          <nav className="lg:hidden flex items-center gap-1 pb-2.5 overflow-x-auto no-scrollbar">
+          <nav className="lg:hidden flex items-center gap-0.5 pb-2.5 overflow-x-auto no-scrollbar">
             {links.map((n) => (
-              <NavLink key={n.to} to={n.to} className={navLinkClass}>
-                {t.nav[n.key]}
-              </NavLink>
+              <NavItem key={n.to} to={n.to} label={t.nav[n.key]} />
             ))}
           </nav>
         </div>
@@ -158,7 +180,7 @@ function Caret() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/70"
+      className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-500"
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"

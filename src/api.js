@@ -66,6 +66,10 @@ export const api = {
   classify: (query, actor, lang) => post('/classify', { query, actor, lang }),
   translate: (text, target) => post('/translate', { text, target }),
 
+  // AI Voice Guide — backend decides the spoken reply + which on-screen element
+  // to highlight. Returns { reply, action: 'highlight'|'none', target }.
+  guide: (context, transcript, lang) => post('/guide', { context, transcript, language: lang }),
+
   // Cases + workflow
   getCases: () => get('/cases'),
   getCase: (id) => get(`/cases/${id}`),
