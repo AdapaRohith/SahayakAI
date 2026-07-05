@@ -95,10 +95,32 @@ export const api = {
 
   // Documents lifecycle: draft → approve → issue
   getTemplates: () => get('/templates'),
-  draftDocument: (case_id, template_id, actor, lang) => post('/documents/draft', { case_id, template_id, actor, lang }),
+  // `language` (hi|te|bn|…) drives language-aware drafting; backend auto-detects
+  // when omitted. `lang` kept for backward-compatible servers.
+  draftDocument: (case_id, template_id, actor, lang) => post('/documents/draft', { case_id, template_id, actor, lang, language: lang }),
+  autofill: (case_id, template_id, fields, actor, lang) => post('/autofill', { case_id, template_id, fields, actor, language: lang }),
   saveDocument: (id, content) => put(`/documents/${id}`, { content }),
   approveDocument: (id, actor) => post(`/documents/${id}/approve`, { actor }),
   issueDocument: (id, actor) => post(`/documents/${id}/issue`, { actor }),
+
+  // Certified PDF render of a document (GET /documents/{id}/pdf).
+  // `documentPdfUrl` is the raw endpoint (direct download link). `fetchDocumentPdf`
+  // pulls it as a Blob so the UI can build an object URL — that renders inline in an
+  // <iframe> even though the endpoint sends `Content-Disposition: attachment`.
+  documentPdfUrl: (id) => `${BASE}/documents/${id}/pdf`,
+  fetchDocumentPdf: async (id) => {
+    let res
+    try {
+      res = await fetch(`${BASE}/documents/${id}/pdf`)
+    } catch (networkErr) {
+      throw new ApiError(0, `Cannot reach the backend at ${BASE}. (${networkErr.message})`)
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new ApiError(res.status, body || res.statusText)
+    }
+    return res.blob()
+  },
 
   // Document upload → OCR field extraction (multipart/form-data)
   extract: (docType, file) => {

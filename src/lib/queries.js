@@ -132,6 +132,15 @@ export function useCreateRoutedCase() {
   })
 }
 
+export function useAutofill() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: ({ caseId, templateId, fields, actor, lang }) => api.autofill(caseId, templateId, fields, actor, lang),
+    // autofill creates a lightweight case + draft, so refresh cases too.
+    onSuccess: () => invalidate(keys.cases, keys.audit, keys.analytics),
+  })
+}
+
 export function useDraftDocument() {
   const invalidate = useInvalidate()
   return useMutation({

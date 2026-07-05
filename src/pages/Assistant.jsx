@@ -1,16 +1,63 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { useChat, useExtract } from '../lib/queries.js'
+import { useChat, useExtract, useTemplates, useAutofill } from '../lib/queries.js'
 import { useSpeech } from '../lib/useSpeech.js'
 import { useT } from '../lib/i18n.js'
+import { api } from '../api.js'
 import CitationPanel from '../components/CitationPanel.jsx'
 import { SectionTitle, Shield } from '../components/ui.jsx'
 
 const DOC_TYPES = ['aadhaar', 'income_certificate', 'land_record']
 
+// Pick the template that best matches the uploaded document type; fall back to
+// the first available template so the "generate document" button always works.
+function templateForDocType(templates, docType) {
+  const match = {
+    income_certificate: /income/i,
+    land_record: /record|mutation|land/i,
+    aadhaar: /income|certificate/i,
+  }[docType]
+  return (match && templates.find((t) => match.test(t.name))) || templates[0] || null
+}
+
+// Only allow http(s) hrefs — blocks javascript:/data:/etc. schemes sneaking in
+// through a backend-supplied pdf_url (defends against a tampered chat response).
+function isSafeHttpUrl(u) {
+  try {
+    const p = new URL(u, window.location.origin)
+    return p.protocol === 'http:' || p.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+// Confirm a base64 blob is actually a PDF (starts with "%PDF-") before we render
+// it in an iframe, so a data: URL can't be abused to inject phishing content.
+function looksLikePdf(b64) {
+  try {
+    return atob(String(b64).slice(0, 12)).startsWith('%PDF-')
+  } catch {
+    return false
+  }
+}
+
 // Human labels for extracted field keys (backend returns snake_case).
 function prettyKey(k) {
   return k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// A 422 from /extract means the document validator rejected the upload
+// (not a government-issued document). Pull the human guidance out of the
+// FastAPI error body, which is `{ detail: "..." }` (or a validation array).
+function rejectionDetail(err) {
+  try {
+    const parsed = JSON.parse(err.body)
+    if (typeof parsed?.detail === 'string') return parsed.detail
+    if (Array.isArray(parsed?.detail)) return parsed.detail.map((d) => d.msg).filter(Boolean).join('; ')
+  } catch {
+    /* body wasn't JSON — fall through */
+  }
+  return err.body || err.message
 }
 
 // Turn [1],[2] markers (if the backend adds them) into small superscripts.
@@ -22,6 +69,9 @@ export default function Assistant() {
   const { actor, lang } = useApp()
   const chat = useChat()
   const extract = useExtract()
+  const templatesQ = useTemplates()
+  const autofill = useAutofill()
+  const [genId, setGenId] = useState(null) // extract-message id currently generating a doc
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [activeRef, setActiveRef] = useState(null)
@@ -33,6 +83,7 @@ export default function Assistant() {
   const t = useT()
   const ta = t.assistant
   const tu = ta.upload
+  const td = ta.doc
   const scrollRef = useRef(null)
 
   const { supported, listening, error: micError, start, stop } = useSpeech(lang, (transcript, isFinal) => {
@@ -64,6 +115,24 @@ export default function Assistant() {
       setMessages((m) => [...m, botMsg])
       setPanel({ citations, usedChunks })
       setActiveRef(citations[0]?.source_ref ?? null)
+
+      // The chat endpoint can attach a generated document (base64 PDF + url).
+      // Render it inline right after the bot's text answer.
+      const da = res.doc_action
+      if (da && (da.pdf_base64 || da.pdf_url)) {
+        setMessages((m) => [
+          ...m,
+          {
+            id: `pdf_${Date.now()}`,
+            role: 'assistant',
+            kind: 'pdf',
+            pdfBase64: da.pdf_base64,
+            pdfUrl: da.pdf_url,
+            docId: da.document_id ?? null,
+            caseId: da.case_id ?? null,
+          },
+        ])
+      }
     } catch (err) {
       setMessages((m) => [
         ...m,
@@ -95,10 +164,36 @@ export default function Assistant() {
         },
       ])
     } catch (err) {
+      // 422 = validator rejected a non-government document; surface its guidance.
+      const text = err.status === 422 ? tu.rejected(rejectionDetail(err)) : tu.error(err.message)
       setMessages((m) => [
         ...m,
-        { id: `exe_${Date.now()}`, role: 'assistant', error: true, text: tu.error(err.message), citations: [], usedChunks: [] },
+        { id: `exe_${Date.now()}`, role: 'assistant', error: true, text, citations: [], usedChunks: [] },
       ])
+    }
+  }
+
+  // Turn extracted fields into an official document: autofill a template, then
+  // render the certified PDF inline. autofill also files it as a case (R3 draft),
+  // so the returned case_id is the application number shown to the citizen.
+  async function generateDoc(srcMsg) {
+    const templates = templatesQ.data ?? []
+    const tpl = templateForDocType(templates, srcMsg.docType)
+    if (!tpl || autofill.isPending) return
+    setGenId(srcMsg.id)
+    try {
+      const doc = await autofill.mutateAsync({ caseId: null, templateId: tpl.id, fields: srcMsg.fields, actor, lang })
+      setMessages((m) => [
+        ...m,
+        { id: `pdf_${Date.now()}`, role: 'assistant', kind: 'pdf', docId: doc.id, caseId: doc.case_id, templateName: tpl.name },
+      ])
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        { id: `pdfe_${Date.now()}`, role: 'assistant', error: true, text: td.error(err.message), citations: [], usedChunks: [] },
+      ])
+    } finally {
+      setGenId(null)
     }
   }
 
@@ -169,7 +264,28 @@ export default function Assistant() {
                     {m.engine && (
                       <div className="mt-2.5 pt-2 border-t border-ink-100 text-[11px] text-ink-500">{tu.engine(m.engine)}</div>
                     )}
+                    {Object.keys(m.fields).length > 0 && (
+                      <button
+                        onClick={() => generateDoc(m)}
+                        disabled={autofill.isPending || (templatesQ.data ?? []).length === 0}
+                        className="btn-teal w-full h-10 mt-3 text-sm"
+                      >
+                        <Shield className="h-4 w-4" /> {genId === m.id ? td.generating : td.generate}
+                      </button>
+                    )}
                   </div>
+                </div>
+              ) : m.kind === 'pdf' ? (
+                <div key={m.id} className="flex justify-start animate-fadeUp">
+                  <PdfMessage
+                    docId={m.docId}
+                    caseId={m.caseId}
+                    templateName={m.templateName}
+                    pdfBase64={m.pdfBase64}
+                    pdfUrl={m.pdfUrl}
+                    td={td}
+                    botName={ta.botName}
+                  />
                 </div>
               ) : (
                 <div key={m.id} className="flex justify-start animate-fadeUp">
@@ -223,11 +339,13 @@ export default function Assistant() {
               ),
             )}
 
-            {(chat.isPending || extract.isPending) && (
+            {(chat.isPending || extract.isPending || autofill.isPending) && (
               <div className="flex justify-start animate-fadeUp">
                 <div className="rounded-2xl rounded-bl-sm bg-white border border-ink-200 px-4 py-3 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-accent-600 animate-pulseDot" />
-                  <span className="text-sm text-ink-500">{extract.isPending ? tu.extracting : ta.retrieving}</span>
+                  <span className="text-sm text-ink-500">
+                    {autofill.isPending ? td.generating : extract.isPending ? tu.extracting : ta.retrieving}
+                  </span>
                 </div>
               </div>
             )}
@@ -361,6 +479,99 @@ export default function Assistant() {
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Inline certified-PDF card rendered in the chat. Fetches the PDF as a Blob so
+// it renders inline in the <iframe> despite the endpoint's attachment header.
+function PdfMessage({ docId, caseId, templateName, pdfBase64, pdfUrl, td, botName }) {
+  const [url, setUrl] = useState(() =>
+    pdfBase64 && looksLikePdf(pdfBase64) ? `data:application/pdf;base64,${pdfBase64}` : null,
+  )
+  const [loading, setLoading] = useState(!pdfBase64)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    // Base64 came inline with the chat response — render it directly, no fetch,
+    // but only after confirming it's really a PDF (not injected data:).
+    if (pdfBase64) {
+      if (looksLikePdf(pdfBase64)) {
+        setUrl(`data:application/pdf;base64,${pdfBase64}`)
+      } else {
+        setError(td.error('invalid PDF data'))
+      }
+      setLoading(false)
+      return
+    }
+    // Otherwise fetch the PDF for a document id (autofill/officer path).
+    if (docId == null) {
+      setError('No document to render.')
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    let objUrl = null
+    setLoading(true)
+    setError(null)
+    api
+      .fetchDocumentPdf(docId)
+      .then((blob) => {
+        if (cancelled) return
+        objUrl = URL.createObjectURL(blob)
+        setUrl(objUrl)
+      })
+      .catch((err) => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true; if (objUrl) URL.revokeObjectURL(objUrl) }
+  }, [docId, pdfBase64])
+
+  // Prefer the hosted url for download/open when the backend supplied one — but
+  // only if it's a safe http(s) scheme; otherwise fall back to the local blob/data URL.
+  const downloadHref = pdfUrl && isSafeHttpUrl(pdfUrl) ? pdfUrl : url
+
+  return (
+    <div className="max-w-[92%] w-full rounded-2xl rounded-bl-sm px-4 py-3 border bg-white border-ink-200">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded bg-ink-900 text-white">
+          <Shield className="h-3 w-3" />
+        </span>
+        <span className="text-xs font-bold text-ink-900">{botName}</span>
+        {templateName && <span className="chip bg-approved-bg text-approved">{templateName}</span>}
+      </div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-ink-500 mb-2">{td.pdfTitle}</div>
+
+      {loading ? (
+        <div className="h-[420px] skeleton rounded-lg" />
+      ) : error ? (
+        <div className="rounded-lg bg-breach-bg/60 border border-breach/30 px-3 py-2 text-xs text-breach">{td.error(error)}</div>
+      ) : url ? (
+        <iframe title={td.pdfTitle} src={url} className="w-full h-[420px] rounded-lg border border-ink-200 bg-white" />
+      ) : null}
+
+      <div className="mt-2.5 flex items-center gap-2">
+        <a
+          href={downloadHref ?? undefined}
+          download={`document-${docId ?? 'certificate'}.pdf`}
+          aria-disabled={!downloadHref}
+          className={`btn-teal h-9 text-sm ${!downloadHref ? 'pointer-events-none opacity-50' : ''}`}
+        >
+          {td.download}
+        </a>
+        <a
+          href={downloadHref ?? undefined}
+          target="_blank"
+          rel="noreferrer"
+          aria-disabled={!downloadHref}
+          className={`btn-ghost h-9 text-sm ${!downloadHref ? 'pointer-events-none opacity-50' : ''}`}
+        >
+          {td.open}
+        </a>
+      </div>
+
+      {caseId != null && (
+        <div className="mt-2.5 pt-2 border-t border-ink-100 text-[11px] text-ink-600">{td.filedAs(caseId)}</div>
+      )}
     </div>
   )
 }

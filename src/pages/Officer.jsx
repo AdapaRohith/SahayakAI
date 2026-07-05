@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { useTemplates, useCases, useDraftDocument, useSaveDocument, useApproveDocument, useIssueDocument } from '../lib/queries.js'
+import { useTemplates, useCases, useDraftDocument, useSaveDocument, useApproveDocument, useIssueDocument, useCreateCase } from '../lib/queries.js'
 import { useT } from '../lib/i18n.js'
+import { api } from '../api.js'
 import { SectionTitle, StatusBadge, Shield } from '../components/ui.jsx'
 
 // Map backend document status -> the StatusBadge vocabulary.
@@ -18,6 +19,7 @@ export default function Officer() {
   const saveMut = useSaveDocument()
   const approveMut = useApproveDocument()
   const issueMut = useIssueDocument()
+  const createCaseMut = useCreateCase()
 
   const [templateId, setTemplateId] = useState(null)
   const [caseId, setCaseId] = useState('')
@@ -26,6 +28,13 @@ export default function Officer() {
   const [editContent, setEditContent] = useState('')
   const [reviewed, setReviewed] = useState(false)
   const [actionError, setActionError] = useState(null)
+
+  // Certified-PDF preview + "submit as application" state.
+  const [pdfUrl, setPdfUrl] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState(null)
+  const [submitError, setSubmitError] = useState(null)
+  const [submittedCaseId, setSubmittedCaseId] = useState(null)
 
   const templates = templatesQ.data ?? []
   const cases = casesQ.data ?? []
@@ -42,7 +51,42 @@ export default function Officer() {
     setEditContent(selected?.content ?? '')
     setReviewed(false)
     setActionError(null)
+    setSubmitError(null)
+    setSubmittedCaseId(null)
   }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch the certified PDF as a Blob and expose it via an object URL. A blob URL
+  // renders inline in the <iframe> even though the endpoint sends the PDF as an
+  // attachment. Refetch when the document content/status changes (edit/approve/issue
+  // change what the PDF renders). Revoke the old URL on cleanup to avoid leaks.
+  useEffect(() => {
+    if (!selectedId) {
+      setPdfUrl(null)
+      return
+    }
+    let cancelled = false
+    let objUrl = null
+    setPdfLoading(true)
+    setPdfError(null)
+    setPdfUrl(null)
+    api
+      .fetchDocumentPdf(selectedId)
+      .then((blob) => {
+        if (cancelled) return
+        objUrl = URL.createObjectURL(blob)
+        setPdfUrl(objUrl)
+      })
+      .catch((err) => {
+        if (!cancelled) setPdfError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setPdfLoading(false)
+      })
+    return () => {
+      cancelled = true
+      if (objUrl) URL.revokeObjectURL(objUrl)
+    }
+  }, [selectedId, selected?.content, selected?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function upsertDoc(doc) {
     setDocs((prev) => {
@@ -86,6 +130,32 @@ export default function Officer() {
           ? t.blocked409
           : err.message,
       )
+    }
+  }
+
+  // Submit the certified document into the system as a new application/case.
+  // Seeds the new case from the source case (when present) so it lands in the
+  // right workflow; the backend classifies workflow_type from the title/details.
+  async function submitApplication() {
+    if (!selected) return
+    setSubmitError(null)
+    const srcCase = cases.find((c) => c.id === selected.case_id)
+    const body = {
+      title: srcCase ? `Application — ${srcCase.title}` : `Application — Document #${selected.id}`,
+      citizen_name: srcCase?.citizen_name || actor,
+      case_type: srcCase?.case_type || 'application',
+      details: {
+        source_document_id: selected.id,
+        template_id: selected.template_id,
+        source_case_id: selected.case_id,
+        origin: 'officer_pdf_submit',
+      },
+    }
+    try {
+      const created = await createCaseMut.mutateAsync(body)
+      setSubmittedCaseId(created?.id ?? null)
+    } catch (err) {
+      setSubmitError(err.message)
     }
   }
 
@@ -271,6 +341,71 @@ export default function Officer() {
                 <p className="text-[11px] text-ink-500 mt-3">
                   {t.approveNote(t.approvedWord)}
                 </p>
+              </div>
+
+              {/* Certified PDF preview + submit-as-application */}
+              <div className="card p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-widest text-ink-500">{t.pdfEyebrow}</div>
+                    <h3 className="text-lg font-extrabold text-ink-950">{t.pdfTitle}</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={pdfUrl ?? undefined}
+                      download={`document-${selected.id}.pdf`}
+                      aria-disabled={!pdfUrl}
+                      className={`btn-ghost ${!pdfUrl ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      {t.download}
+                    </a>
+                    <a
+                      href={pdfUrl ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-disabled={!pdfUrl}
+                      className={`btn-ghost ${!pdfUrl ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      {t.openTab}
+                    </a>
+                  </div>
+                </div>
+
+                {pdfLoading ? (
+                  <div className="h-[520px] skeleton rounded-lg" />
+                ) : pdfError ? (
+                  <div className="rounded-lg bg-breach-bg/60 border border-breach/30 px-3 py-2 text-xs text-breach">
+                    {t.pdfError(pdfError)}
+                  </div>
+                ) : pdfUrl ? (
+                  <iframe
+                    title={t.pdfTitle}
+                    src={pdfUrl}
+                    className="w-full h-[520px] rounded-lg border border-ink-200 bg-white"
+                  />
+                ) : null}
+
+                <div className="mt-4 border-t border-ink-200 pt-4">
+                  <button
+                    onClick={submitApplication}
+                    disabled={createCaseMut.isPending || !!submittedCaseId}
+                    className="btn-teal w-full h-12 text-base"
+                  >
+                    <Shield className="h-5 w-5" /> {createCaseMut.isPending ? t.submitting : t.submitApplication}
+                  </button>
+                  <p className="text-[11px] text-ink-500 text-center px-2 mt-2">{t.submitNote}</p>
+
+                  {submittedCaseId && (
+                    <div className="mt-3 rounded-lg bg-accent-50 border border-accent-600/30 px-3 py-2 text-xs text-accent-700">
+                      {t.submitted(submittedCaseId)}
+                    </div>
+                  )}
+                  {submitError && (
+                    <div className="mt-3 rounded-lg bg-breach-bg/60 border border-breach/30 px-3 py-2 text-xs text-breach">
+                      {t.submitError(submitError)}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
